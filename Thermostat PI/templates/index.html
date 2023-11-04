@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Thermostat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: black;
+            color: white;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            background: hsl(238, 11%, 50%);
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Thermostat</h1>
+        <div class="time" id="current_time"></div>
+        <p>Current temperature: <span id="temperature_value"></span>°F</p>
+        <p>Current humidity: <span id="humidity_value"></span>%</p>
+        <input type="range" id="temperature_slider" min="65" max="82" step="0.5" value="72" class="slider">
+        <p id="slider_value"></p>
+        <button id="set_temperature_btn">Set Temperature</button>
+    </div>
+    
+    <script>
+        function updateTime() {
+            var now = new Date();
+            var hours = now.getHours().toString().padStart(2, '0');
+            var minutes = now.getMinutes().toString().padStart(2, '0');
+            var seconds = now.getSeconds().toString().padStart(2, '0');
+            var timeString = hours + ':' + minutes + ':' + seconds;
+            document.getElementById('current_time').innerText = timeString;
+        }
+    
+        // Update time initially
+        updateTime();
+    
+        // Update time every second
+        setInterval(updateTime, 1000);
+    
+        function updateTemperatureHumidity() {
+            fetch('/data', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('temperature_value').innerText = data.temperature;
+                    document.getElementById('humidity_value').innerText = data.humidity;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+
+        // Update temperature and humidity initially
+        updateTemperatureHumidity();
+
+        // Update temperature and humidity every 2 seconds
+        setInterval(updateTemperatureHumidity, 2000);
+
+        // Slider value update
+        var slider = document.getElementById('temperature_slider');
+        var sliderValue = document.getElementById('slider_value');
+        
+        slider.oninput = function() {
+            sliderValue.innerText = this.value;
+        }
+
+        // Set temperature button click handler
+        document.getElementById('set_temperature_btn').addEventListener('click', function() {
+            var targetTemperature = slider.value;
+            fetch('/thermostat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'temperature=' + targetTemperature
+            })
+                .then(response => response.text())
+                .then(message => {
+                    alert(message);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        });
+    </script>
+</body>
+</html>
+

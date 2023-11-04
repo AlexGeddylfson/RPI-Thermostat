@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Information</title>
+</head>
+<body>
+    <h1>User Information</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Device ID</th>
+            <th>Target Temperature</th>
+            <th>Timestamp</th>
+        </tr>
+        {% for user_entry in user_data %}
+        <tr>
+            <td>{{ user_entry.id }}</td>
+            <td>{{ user_entry.device_id }}</td>
+            <td>{{ user_entry.target_temperature }}</td>
+            <td>{{ user_entry.timestamp }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

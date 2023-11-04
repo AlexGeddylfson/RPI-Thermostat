@@ -1,0 +1,13 @@
+{
+    "html_config": {
+      "rpi-thermo": "http://RPIIPHERE:5001/api/current_data",
+      "vm-server": "http://DBVMIPHERE:5000/api/get_last_user_setting"
+    },
+    "database_config": {
+      "host": "localhost",
+      "user": "USERHERE",
+      "password": "PASSWORDHERE",
+      "database_name": "DBNAMEHERE"
+    }
+  }
+  

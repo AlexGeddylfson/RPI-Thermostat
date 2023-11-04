@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Thermostat</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"> <!-- Add this line to specify UTF-8 character encoding -->
+        <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: black;
+            color: white;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .temperature-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .temperature-value {
+            font-size: 24px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .arrow-button {
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Thermostat</h1>
+        <div class="time" id="current_time"></div>
+
+        <p>Downstairs temperature: <span id="temperature_value"></span></p>
+        <p>Downstairs humidity: <span id="humidity_value"></span></p>
+        <p id="device_id"></p>
+        <!--<p>Upstairs temperature: <span id="upstairs_temperature"></span>&deg;F</p>
+        <p>Upstairs humidity: <span id="upstairs_humidity"></span>%</p>-->
+
+        <!-- Display the device ID here -->
+        <p id="device_id2"></p>
+
+    
+        <div class="temperature-box">
+            <span class="temperature-value" id="current_temperature">72</span>
+            <div class="controls">
+                <span class="arrow-button" id="increase_temperature">&#9650;</span> <!-- Up arrow entity -->
+                <span class="arrow-button" id="decrease_temperature">&#9660;</span> <!-- Down arrow entity -->
+            </div>
+        </div>
+
+        <button id="set_temperature_btn">Set Temperature</button>
+    </div>
+
+    <script>
+        function updateTime() {
+            var now = new Date();
+            var hours = now.getHours().toString().padStart(2, '0');
+            var minutes = now.getMinutes().toString().padStart(2, '0');
+            var seconds = now.getSeconds().toString().padStart(2, '0');
+            var timeString = hours + ':' + minutes + ':' + seconds;
+            document.getElementById('current_time').innerText = timeString;
+        }
+    
+        // Update time initially
+        updateTime();
+    
+        // Update time every second
+        setInterval(updateTime, 1000);
+    
+        function fetchCurrentTemperature() {
+            fetch('http://"YOURRPIIPHERE"/api/current_data', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                .then(response => response.json())
+                .then(data => {
+                    // Update the temperature and humidity values
+                    document.getElementById('temperature_value').innerText = data.temperature + '°F';
+                    document.getElementById('humidity_value').innerText = data.humidity + '%';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+    
+        // Fetch and update the current temperature initially
+        fetchCurrentTemperature();
+    
+// Poll the current temperature every 20 seconds
+setInterval(fetchCurrentTemperature, 20000);
+    
+        // Function to update the displayed temperature
+        function updateDisplayedTemperature(temperatureValue) {
+            document.getElementById('current_temperature').innerText = temperatureValue;
+        }
+    
+        // Get the initial temperature value
+        var currentTemperature = 72; // Initial value
+    
+        // Add click event listeners to increase and decrease temperature
+        document.getElementById('increase_temperature').addEventListener('click', function () {
+            currentTemperature += 1;
+            if (currentTemperature > 82) {
+                currentTemperature = 82;
+            }
+            updateDisplayedTemperature(currentTemperature);
+        });
+    
+        document.getElementById('decrease_temperature').addEventListener('click', function () {
+            currentTemperature -= 1;
+            if (currentTemperature < 62) {
+                currentTemperature = 62;
+            }
+            updateDisplayedTemperature(currentTemperature);
+        });
+        // Function to update the displayed temperature
+function updateDisplayedTemperature(temperatureValue) {
+    document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F'; // Round temperature and display it
+}
+
+/// Function to update the displayed temperature
+function updateDisplayedTemperature(temperatureValue) {
+    document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F'; // Round temperature and display it
+}
+
+// Function to fetch and display the last user setting
+function fetchUserSetting() {
+    fetch('http://VMDBSERVERHERE:5000/api/get_last_user_setting', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+        .then(response => response.json())
+        .then(data => {
+            // Update the "current_temperature" with the user setting
+            currentTemperature = parseInt(data.last_user_setting); // Set the currentTemperature to the user setting
+            updateDisplayedTemperature(currentTemperature);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// Fetch and update the user setting initially
+fetchUserSetting();
+
+// Poll the user setting every 2.5 minutes
+setInterval(fetchUserSetting, 150000);
+
+    
+        // Add click event listener to set the temperature
+        document.getElementById('set_temperature_btn').addEventListener('click', function () {
+            var newTemperatureSetpoint = currentTemperature;
+    
+            // Send a POST request to update the temperature setpoint
+            fetch('http://VMDBSERVERHERE:5000/update_temperature', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ temperature: newTemperatureSetpoint })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        });
+    </script>
+</body>
+</html>
