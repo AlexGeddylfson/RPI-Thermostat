@@ -6,7 +6,7 @@ Physical Dependencies
 
 1. A VM or physical machine running some sort of Apache/Nginx web server, and python.
 2. A Raspberry Pi with a DHT22 temperature and humidity sensor, a 30V 4 channel relay, and mine has a 7 inch touch screen. (you can do without)
-3. Basic knowledge of your specific HVAC system and the willingness to modify this code to work with anything other than a 6 wire system. 
+3. Basic knowledge of your specific HVAC system and the willingness to modify this code to work with anything other than a 6 wire system that has an orange wire for the energized reversal valve for COOLING. 
 
 Getting Started 
 Assuming this is running in Ubuntu/Debian
