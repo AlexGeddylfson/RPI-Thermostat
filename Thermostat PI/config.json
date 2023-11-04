@@ -3,5 +3,6 @@
     "rpi-thermo": "http://RPIIP:5001",
     "relay_pins": [27, 22, 23, 24],
     "dht_sensor_pin": 4,
-    "device_id": "Device ID here"
+    "device_id": "Device ID here",
+    "DEFAULT_TEMPERATURE_SETTING": 70.0
 }
