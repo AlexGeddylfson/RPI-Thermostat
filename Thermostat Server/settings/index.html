@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config Editor</title>
+    <style>
+        body {
+            font-family: 'Aptos', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: black;
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 345px;
+            height: fit-content;
+            max-width: 400px;
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #555;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: black;
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #333;
+        }
+
+        .gear-icon {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <a href="/" class="gear-icon">&#9881;</a>
+    <h2>Edit Config</h2>
+    <div id="config-edit"></div>
+    <button onclick="updateConfig()">Update Config</button>
+</div>
+
+<script>
+    function fetchConfig() {
+        fetch('http://RPITHERMOSTATIP:5001/api/get_config')
+            .then(response => response.json())
+            .then(data => {
+                displayConfig(data);
+            })
+            .catch(error => {
+                console.error('Error fetching config:', error);
+            });
+    }
+
+    function displayConfig(config) {
+    const configEdit = document.getElementById('config-edit');
+    configEdit.innerHTML = '';
+
+    for (const key in config) {
+        if (config.hasOwnProperty(key)) {
+            const value = config[key];
+
+            if (Array.isArray(value)) {
+                // Handle arrays differently
+                configEdit.innerHTML += `<label for="${key}">${key}:</label>`;
+                configEdit.innerHTML += `<input type="text" id="${key}" value="${value.join(', ')}"><br>`;
+            } else if (key === 'timer_durations' && typeof value === 'object') {
+                // Handle timer_durations object separately
+                for (const timerKey in value) {
+                    if (value.hasOwnProperty(timerKey)) {
+                        const timerValue = value[timerKey];
+                        configEdit.innerHTML += `<label for="${timerKey}">${timerKey}:</label>`;
+                        configEdit.innerHTML += `<input type="text" id="${timerKey}" value="${timerValue}"><br>`;
+                    }
+                }
+            } else {
+                // Convert objects to strings before displaying
+                const displayValue = typeof value === 'object' ? JSON.stringify(value) : value;
+                configEdit.innerHTML += `<label for="${key}">${key}:</label>`;
+                configEdit.innerHTML += `<input type="text" id="${key}" value="${displayValue}"><br>`;
+            }
+        }
+    }
+}
+
+
+    function updateConfig() {
+        const updatedConfig = {};
+
+        document.querySelectorAll('#config-edit input').forEach(input => {
+            // Convert to number if the input value is a valid number
+            const value = !isNaN(input.value) ? parseFloat(input.value) : input.value;
+
+            // Special handling for relay_pins to convert it to an array of numbers
+            if (input.id === "relay_pins") {
+                updatedConfig[input.id] = value.split(',').map(pin => parseInt(pin));
+            } else {
+                updatedConfig[input.id] = value;
+            }
+        });
+
+        fetch('http://RPITHERMOSTATIP:5001/api/update_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updatedConfig)
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data.message);
+            fetchConfig();
+        })
+        .catch(error => {
+            console.error('Error updating config:', error);
+        });
+    }
+
+    // Fetch initial config on page load
+    fetchConfig();
+</script>
+
+</body>
+</html>

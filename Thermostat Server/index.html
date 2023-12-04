@@ -1,118 +1,266 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <title>Thermostat</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta charset="UTF-8"> <!-- Add this line to specify UTF-8 character encoding -->
-        <style>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thermostat</title>
+    <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Aptos', Tahoma, Geneva, Verdana, sans-serif;
             background-color: black;
             color: white;
-        }
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+}
+        /* Add a media query for smaller screens */
+        @media (max-width: 600px) {
+            body {
+                flex-direction: column;
+    }
+}
 
         .container {
+            width: 345px;
+            height: 275px;
             max-width: 400px;
-            margin: 0 auto;
+            margin: 20px;
             padding: 20px;
+            border: 1px solid #555;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .camera_container {
+            width: 300px;
+            height: 200px;
+    max-width: 400px;
+    margin: 20px;
+    padding: 20px;
+    border: 1px solid #555;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera_container iframe {
+    width: 100%;
+    height: 100%;
+    border: none; /* Remove default iframe border */
+}
+
+.printer_container {
+            width: 280px;
+            height: 200px;
+    max-width: 400px;
+    margin: 20px;
+    padding: 20px;
+    border: 1px solid #555;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.printer_container iframe {
+    width: 100%;
+    height: 100%;
+    border: none; /* Remove default iframe border */
+}
+
+
+.set_temperature_btn {
+    margin-top: 20px; /* Add some top margin for spacing */
+    background-color: black; /* Set background color to black */
+    color: white; /* Set text color to white */
+    border: none; /* Remove border */
+    border-radius: 8px; /* Add border-radius for rounded corners */
+    padding: 10px 20px; /* Adjust padding for a larger button */
+    font-size: 16px; /* Set font size */
+    cursor: pointer; /* Add cursor pointer for interaction */
+    transition: background-color 0.3s ease; /* Add transition for smooth color change */
+}
+
+.set_temperature_btn:hover {
+    background-color: #333; /* Change background color on hover */
+}
+
+        h1 {
+            text-align: center;
+        }
+        h3 {
+            text-align: center;
+            margin: 5px 0;
+        }
+        h5 {
+            text-align: center;
+            margin: 5px 0;
+        }
+        .time {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        p {
+            text-align: center;
+            margin: 0px 0;
         }
 
         .temperature-box {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
             align-items: center;
         }
 
-        .temperature-value {
-            font-size: 24px;
+        .current-value{
+            font-size: 20px;
         }
+
+        .temperature-value {
+            font-size: 20px;
+        }
+
 
         .controls {
             display: flex;
-            flex-direction: column;
+            margin-top: 10px;
         }
 
         .arrow-button {
+            font-size: 30px;
+            cursor: pointer;
+            margin: 0 20px;
+        }
+
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .switch-label {
+            font-size: 18px;
+            margin-right: 10px;
+        }
+
+        .switch-input {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 40px;
+            height: 20px;
+            background-color: #ccc;
+            border-radius: 20px;
+            position: relative;
+        }
+
+        .switch-input:checked + .switch-slider {
+            background-color: #5db55e;
+        }
+
+        .switch-slider {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #fff;
+            transition: 0.4s;
+        }
+
+        #menu-icon {
+            position: absolute;
+            top: 20px;
+            right: 20px;
             font-size: 24px;
             cursor: pointer;
         }
 
-        @media (max-width: 480px) {
-            .container {
-                max-width: 300px;
-            }
+        .menu {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            display: none;
+        }
+
+        .menu a {
+            display: block;
+            color: white;
+            text-decoration: none;
+            margin: 10px 0;
+        }
+
+        .menu a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
+
     <div class="container">
-        <h1>Thermostat</h1>
         <div class="time" id="current_time"></div>
 
-        <p>Downstairs temperature: <span id="temperature_value"></span></p>
-        <p>Downstairs humidity: <span id="humidity_value"></span></p>
-        <p id="device_id"></p>
-        <!--<p>Upstairs temperature: <span id="upstairs_temperature"></span>&deg;F</p>
-        <p>Upstairs humidity: <span id="upstairs_humidity"></span>%</p>-->
-
-        <!-- Display the device ID here -->
-        <p id="device_id2"></p>
-
-    
+        <h3>Downstairs: <span class="current-value" span id="temperature_value"> </span> </h3>
+        <h5>Office: <span class="current-value2" span id="d_temperature_value"> </span> </h5>
+        <h5>Olivia's Room: <span class="current-value2" span id="o_temperature_value"> </span> </h5>
         <div class="temperature-box">
-            <span class="temperature-value" id="current_temperature">72</span>
             <div class="controls">
-                <span class="arrow-button" id="increase_temperature">&#9650;</span> <!-- Up arrow entity -->
-                <span class="arrow-button" id="decrease_temperature">&#9660;</span> <!-- Down arrow entity -->
+                <span class="arrow-button" id="decrease_temperature">&#9660;</span>
+                <span class="temperature-value" id="current_temperature"></span>
+                <span class="arrow-button" id="increase_temperature">&#9650;</span>
             </div>
         </div>
 
-        <button id="set_temperature_btn">Set Temperature</button>
+        <!-- Display the thermostat state here -->
+        <p><span id="thermostat_state"></span></p>
+
+        <button id="set_temperature_btn" style="background-color: black; color: white; border: 2px solid white; border-radius: 8px; padding: 10px 20px; font-size: 16px; cursor: pointer; transition: background-color 0.3s ease;">Set Temperature</button>
     </div>
 
-    <script>
-        function updateTime() {
-            var now = new Date();
-            var hours = now.getHours().toString().padStart(2, '0');
-            var minutes = now.getMinutes().toString().padStart(2, '0');
-            var seconds = now.getSeconds().toString().padStart(2, '0');
-            var timeString = hours + ':' + minutes + ':' + seconds;
-            document.getElementById('current_time').innerText = timeString;
-        }
-    
-        // Update time initially
-        updateTime();
-    
-        // Update time every second
-        setInterval(updateTime, 1000);
-    
-        function fetchCurrentTemperature() {
-            fetch('http://"YOURRPIIPHERE"/api/current_data', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-                .then(response => response.json())
-                .then(data => {
-                    // Update the temperature and humidity values
-                    document.getElementById('temperature_value').innerText = data.temperature + '°F';
-                    document.getElementById('humidity_value').innerText = data.humidity + '%';
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-        }
-    
-        // Fetch and update the current temperature initially
-        fetchCurrentTemperature();
-    
-// Poll the current temperature every 20 seconds
-setInterval(fetchCurrentTemperature, 20000);
-    
-        // Function to update the displayed temperature
-        function updateDisplayedTemperature(temperatureValue) {
-            document.getElementById('current_temperature').innerText = temperatureValue;
-        }
-    
-        // Get the initial temperature value
+    <div id="menu-icon">&#9881;</div>
+    <div class="menu">
+        <a href="/settings">Settings</a>
+<label class="switch-label">Emergency Stop:</label>
+<span id="emergency_stop_status"></span>
+<button id="toggle_emergency_stop">Toggle</button>
+    </div>
+
+<script>
+
+
+
+
+            document.getElementById('menu-icon').addEventListener('click', function () {
+            var menu = document.querySelector('.menu');
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        });
+
+
+    // Function to update the displayed temperature
+    function updateDisplayedTemperature(temperatureValue) {
+        document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F';
+    }
+
+// Get the initial temperature value
         var currentTemperature = 72; // Initial value
-    
+
         // Add click event listeners to increase and decrease temperature
         document.getElementById('increase_temperature').addEventListener('click', function () {
             currentTemperature += 1;
@@ -121,7 +269,7 @@ setInterval(fetchCurrentTemperature, 20000);
             }
             updateDisplayedTemperature(currentTemperature);
         });
-    
+
         document.getElementById('decrease_temperature').addEventListener('click', function () {
             currentTemperature -= 1;
             if (currentTemperature < 62) {
@@ -129,55 +277,185 @@ setInterval(fetchCurrentTemperature, 20000);
             }
             updateDisplayedTemperature(currentTemperature);
         });
-        // Function to update the displayed temperature
-function updateDisplayedTemperature(temperatureValue) {
-    document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F'; // Round temperature and display it
-}
 
-/// Function to update the displayed temperature
-function updateDisplayedTemperature(temperatureValue) {
-    document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F'; // Round temperature and display it
+    // Function to update the displayed emergency stop status
+function updateEmergencyStopStatus(status) {
+    const statusElement = document.getElementById('emergency_stop_status');
+    statusElement.innerText = `Status: ${status}`;
 }
+// Declare a variable to track the emergency stop state
+let emergencyStopEnabled = false;
 
-// Function to fetch and display the last user setting
-function fetchUserSetting() {
-    fetch('http://VMDBSERVERHERE:5000/api/get_last_user_setting', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+// Function to toggle the emergency stop state
+function toggleEmergencyStop() {
+    fetch('http://RPITHERMOSTATIP:5001/api/emergency_stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enable: !emergencyStopEnabled }), // Toggle the state
+    })
         .then(response => response.json())
         .then(data => {
-            // Update the "current_temperature" with the user setting
-            currentTemperature = parseInt(data.last_user_setting); // Set the currentTemperature to the user setting
-            updateDisplayedTemperature(currentTemperature);
+            const message = data.message;
+            emergencyStopEnabled = !emergencyStopEnabled; // Update the variable based on the response
+            updateEmergencyStopStatus(emergencyStopEnabled ? 'Enabled' : 'Disabled');
+            console.log(message);
         })
         .catch(error => {
             console.error('Error:', error);
         });
 }
 
-// Fetch and update the user setting initially
-fetchUserSetting();
-
-// Poll the user setting every 2.5 minutes
-setInterval(fetchUserSetting, 150000);
-
-    
-        // Add click event listener to set the temperature
-        document.getElementById('set_temperature_btn').addEventListener('click', function () {
-            var newTemperatureSetpoint = currentTemperature;
-    
-            // Send a POST request to update the temperature setpoint
-            fetch('http://VMDBSERVERHERE:5000/update_temperature', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ temperature: newTemperatureSetpoint })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data.message);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
+// Function to check and set the initial state of the emergency stop switch
+function checkEmergencyStopState() {
+    fetch('http://RPITHERMOSTATIP:5001/api/emergency_stop', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+        .then(response => response.json())
+        .then(data => {
+            emergencyStopEnabled = data.emergency_stop_enabled;
+            const initialStatus = emergencyStopEnabled ? 'Enabled' : 'Disabled';
+            updateEmergencyStopStatus(initialStatus);
+        })
+        .catch(error => {
+            console.error('Error:', error);
         });
-    </script>
+}
+
+
+
+
+// Add an event listener to the toggle button
+document.getElementById('toggle_emergency_stop').addEventListener('click', toggleEmergencyStop);
+
+// Fetch and update the initial state of the emergency stop switch
+checkEmergencyStopState();
+
+
+    // Function to fetch and display the last user setting
+    function fetchUserSetting() {
+        fetch('http://SERVERIP:5000/api/get_last_user_setting', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                // Update the "current_temperature" with the user setting
+                const currentTemperature = parseInt(data.last_user_setting);
+                updateDisplayedTemperature(currentTemperature);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    // Function to fetch and display the thermostat state
+    function fetchThermostatState() {
+        fetch('http://RPITHERMOSTATIP:5001/api/get_thermostat_state', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                const thermostatState = data.state;
+                document.getElementById('thermostat_state').innerText = `Thermostat State: ${thermostatState}`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    // Function to fetch and display the current temperature
+    function fetchCurrentTemperature() {
+        fetch('http://RPITHERMOSTATIP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('temperature_value').innerText = data.temperature + '°F';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+        // Function to fetch and display the current temperature from 'up.stairs'
+        function fetchCurrentDTemperature() {
+        fetch('http://PROBE1IP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('d_temperature_value').innerText = data.temperature + '°F';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+            // Function to fetch and display the current temperature from 'door.bell'
+            function fetchCurrentOTemperature() {
+        fetch('http://PROBE2IP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('o_temperature_value').innerText = data.temperature + '°F';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+
+    // Add click event listeners to set the temperature
+    document.getElementById('set_temperature_btn').addEventListener('click', function () {
+        var newTemperatureSetpoint = currentTemperature; // Define 'currentTemperature' before use
+        fetch('http://SERVERIP:5000/update_temperature', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ temperature: newTemperatureSetpoint })
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    });
+
+    // Fetch and update the thermostat state initially
+    fetchThermostatState();
+    // Poll the thermostat state every 2 minutes
+    setInterval(fetchThermostatState, 2000);
+
+    // Fetch and update the current temperature initially
+    fetchCurrentTemperature();
+    // Poll the current temperature every 20 seconds
+    setInterval(fetchCurrentTemperature, 2000);
+
+    // Fetch and update the current temperature initially
+   fetchCurrentOTemperature();
+    // Poll the current temperature every 20 seconds
+    setInterval(fetchCurrentOTemperature, 2000);
+
+
+        // Fetch and update the current temperature initially
+    fetchCurrentDTemperature();
+    // Poll the current temperature every 20 seconds
+    setInterval(fetchCurrentDTemperature, 2000);
+
+    // Fetch and update the user setting initially
+    fetchUserSetting();
+    // Poll the user setting every 2.5 minutes
+    setInterval(fetchUserSetting, 15000);
+
+// Function to update the displayed time
+function updateTime() {
+    var now = new Date();
+    var hours = now.getHours();
+    var ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = (hours % 12) || 12; // Convert hours to 12-hour format
+
+    var minutes = now.getMinutes().toString().padStart(2, '0');
+    var seconds = now.getSeconds().toString().padStart(2, '0');
+
+    var timeString = hours + ':' + minutes + ampm;
+    document.getElementById('current_time').innerText = timeString;
+}
+
+    // Update time initially
+    updateTime();
+    // Update time every second
+    setInterval(updateTime, 1000);
+
+
+
+</script>
 </body>
 </html>

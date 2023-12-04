@@ -1,353 +1,348 @@
-#!/usr/bin/env python3
-
-import requests
 import json
 import Adafruit_DHT
-from datetime import datetime
-import pytz
-import time
 import RPi.GPIO as GPIO
+import time
+import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from threading import Thread
+import requests
 
 app = Flask(__name__)
 CORS(app)
-
+ 
 # Load the server addresses from the configuration file
 with open('config.json') as config_file:
     config_data = json.load(config_file)
 
-    # Define the URL for your API endpoint using the "vm-server" URL from config.json
-api_url = f"{config_data['vm-server']}/api/receive_data"
+class Polling:
+    def __init__(self, config_data, thermostat_controller, DHT_SENSOR, DHT_PIN):
+        self.config_data = config_data
+        self.thermostat_controller = thermostat_controller
+        self.current_temperature = None
+        self.DHT_SENSOR = DHT_SENSOR
+        self.DHT_PIN = DHT_PIN
+        self.device_id = config_data.get("device_id")
 
-# Set up GPIO pins for the relay module
-RELAY_PINS = config_data["relay_pins"]
-GPIO.setmode(GPIO.BCM)
 
-# Initialize all relays to the OFF state
-# This is to prevent the relays from spamming all the channels with power to the HVAC system
-# DO NOT MODIFY THIS AS IT CAN LEAD TO COMPRESSOR/SYSTEM FAILURE!!!!! 
-for pin in RELAY_PINS:
-    GPIO.setup(pin, GPIO.OUT)
-    GPIO.output(pin, GPIO.HIGH)
 
-# Set up the DHT sensor
-DHT_SENSOR = Adafruit_DHT.DHT22
-DHT_PIN = config_data["dht_sensor_pin"]
+    def poll_sensor_data(self, max_retries=3, delay_between_retries=2):
+        retries = 0
+        while retries < max_retries:
+            humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, self.DHT_PIN)
+            if humidity is not None and temperature is not None:
+                self.current_temperature = round((temperature * 9/5) + 32, 1)
+                current_humidity = round(humidity, 2)
+                return {"temperature": self.current_temperature, "humidity": current_humidity}
+            else:
+                print("Error reading sensor data. Retrying...")
+                retries += 1
+                time.sleep(delay_between_retries)
 
-def read_temperature():
-    humidity, temperature_celsius = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
-    temperature_fahrenheit = (temperature_celsius * 9/5) + 32  # Convert to Fahrenheit
-    return temperature_fahrenheit
+        print("Max retries reached. Unable to read sensor data.")
+        return {"temperature": None, "humidity": None}
 
-# Function to get the user setting from your server
-def get_user_setting():
-    while True:
+
+    def get_user_setting(self):
         try:
-            response = requests.get(config_data['vm-server'] + '/api/get_last_user_setting')
+            response = requests.get(self.config_data['vm-server'] + '/api/get_last_user_setting')
             if response.status_code == 200:
                 data = response.json()
                 user_setting = data.get('last_user_setting')
                 if user_setting is not None:
-                    user_setting = float(user_setting)
-                return user_setting
+                    return float(user_setting)
+                else:
+                    print('get_user_setting: User setting not found in response')
             else:
-                print('Failed to fetch user setting:', response.status_code)
-                time.sleep(30)  # Wait for half a minute before retrying
+                print('get_user_setting: Failed to fetch user setting:', response.status_code)
+            time.sleep(30)
         except requests.exceptions.RequestException as e:
-            print(f'Error fetching user setting: {str(e)}')
-            time.sleep(60)  # Wait for 1 minute before retrying
+            print(f'get_user_setting: Error fetching user setting: {str(e)}')
+            time.sleep(10)        
 
-# Define thermostat states
-THERMOSTAT_STATES = {
-    0: "Off",
-    1: "Fan Only",
-    2: "Heat",
-    3: "Cool",
-}
+class ThermostatController:
+    def __init__(self, config_data, DHT_SENSOR, DHT_PIN, polling):
+        self.RELAY_PINS = config_data["relay_pins"]
+        GPIO.setup(self.RELAY_PINS, GPIO.OUT)
+        self.current_state = 0  # Initial state is "Off"
+        self.timer_thread = None  # Timer thread
+        self.DHT_SENSOR = DHT_SENSOR
+        self.DHT_PIN = DHT_PIN
+        self.config_data = config_data
+        self.emergency_stop_enabled = False
+        self.stop_event = threading.Event()
+        self.polling = polling
+        self.off_between_states_counter = 0
+        self.heat_mode_timer = 0
+        self.off_mode_counter = 0
+        self.off_mode_duration = 10  # Duration of the initial "Off" mode in seconds
+        self.temperature_within_range_duration = 0
+        self.time_threshold = 30  # 1 minute in seconds
 
-current_thermostat_state = 0  # Initialize to "Off"
+        # Load configurable values from config_data
+        self.cooling_set_temperature_offset = config_data.get("cooling_set_temperature_offset", 0.5)
+        self.heating_set_temperature_offset = config_data.get("heating_set_temperature_offset", 0.5)
+        self.temperature_difference_threshold = config_data.get("temperature_difference_threshold", 1.3)
 
-def request_user_setting_and_temperature():
-    global current_thermostat_state  # Declare current_thermostat_state as global
-    while True:
-        user_setting = get_user_setting()
-        current_temperature_fahrenheit = read_temperature()
-        temperature_achieved_time = None  # Initialize temperature_achieved_time here
-
-        if user_setting is not None:
-            print(f"Last User Setting: {user_setting}°F")
-            print(f"Current Temperature: {current_temperature_fahrenheit}°F")
-
-        # Check if the user-set temperature is achieved
-        if current_thermostat_state != 0:  # Not in "Off" state
-            if current_temperature_fahrenheit > user_setting:
-                if temperature_achieved_time is None:
-                    temperature_achieved_time = time.time()
-                    print("Temperature achieved. Relay control allowed.")
-                elif time.time() - temperature_achieved_time >= 60:  # 1 minute in seconds
-                    current_thermostat_state = 0  # Set to "Off"
-                    temperature_achieved_time = None
-                    print("Temperature achieved for 1 minute. Turning off.")
-            else:
-                temperature_achieved_time = None
-
-        time.sleep(30)  # Sleep for 2 minutes
-
-# Define a variable for the delay in seconds before transitioning to another state
-DELAY_BEFORE_TRANSITION = 20  # You can adjust the delay as needed
-
-# Function to update the thermostat state with a delay
-def update_thermostat_state_with_delay(temperature, user_setting):
-    global current_thermostat_state, state_change_time
-
-    # Get the current time
-    current_time = time.time()
-
-    # Calculate the time elapsed since the last state change
-    time_elapsed = current_time - state_change_time
-
-    # Check if it's time to transition to a new state
-    if time_elapsed >= DELAY_BEFORE_TRANSITION:
-        if user_setting is not None:
-            if temperature > user_setting:
-                current_thermostat_state = 3  # Cool mode
-            elif temperature < user_setting:
-                current_thermostat_state = 2  # Heat mode
-            else:
-                current_thermostat_state = 1  # Fan only
-        else:
-            if all(GPIO.input(pin) == GPIO.HIGH for pin in RELAY_PINS):
-                current_thermostat_state = 0  # Off
-            else:
-                current_thermostat_state = 1  # Fan only
-    else:
-        current_thermostat_state = 0  # Stay in "Off" during the delay
-
-# Initialize the state change time
-state_change_time = time.time()
-
-# In your main loop where you update relay states
-def update_relay_states_with_delay():
-    last_relay_off_time = None  # Initialize the variable to None
-
-    while True:
-        current_temperature_fahrenheit = read_temperature()
-        user_setting = get_user_setting()
-
-        if user_setting is not None:
-            update_thermostat_state_with_delay(current_temperature_fahrenheit, user_setting)
-            print(f"Last User Setting: {user_setting}°F")
-        else:
-            # Use the default temperature setting when the user setting is not available
-            user_setting = DEFAULT_TEMPERATURE_SETTING
-            print(f"User setting not available, using default setting: {user_setting}°F")
-
-        print(f"Current Temperature: {current_temperature_fahrenheit}°F")
-        print(f"Thermostat State: {THERMOSTAT_STATES[current_thermostat_state]}")
-
-        # Control relays based on current_thermostat_state
-        control_relays_based_on_state(current_thermostat_state)
-
-        # Check if enough time has passed before switching to another state
-        if last_relay_off_time is not None and time.time() - last_relay_off_time < 20:
-            continue  # Stay in the current state
-
-        # Update the state change time after a state change
-        state_change_time = time.time()
-
-        # Calculate the time elapsed since the last state change
-        time_elapsed = state_change_time - state_change_time  # Initialize as 0
-
-        while time_elapsed < DELAY_BEFORE_TRANSITION:
-            # Get the current time
-            current_time = time.time()
-
-            # Recalculate the time elapsed
-            time_elapsed = current_time - state_change_time
-
-            # Sleep for a short interval
-            time.sleep(1)
-
-        # Add a delay to the state changes
-        time.sleep(10)  # Adjust this delay as needed
-
-        # Record the time when the relays were last turned off
-        last_relay_off_time = time.time()
-
-        if current_thermostat_state in [COOLING_MODE, HEATING_MODE]:
-            # Delay 20 seconds with "Off" relay before switching to the cooling or heating relay
-            GPIO.output(RELAY_PINS[0], GPIO.HIGH)  # Turn off "Off" relay
-            time.sleep(20)
-            GPIO.output(RELAY_PINS[0], GPIO.LOW)  # Turn on "Off" relay
-
-
-
-# Define global variables
-relay_control_allowed = True
-temperature_achieved_time = None
-fan_override_time = None
-relay_change_time = None
-
-# Define the cooling and heating modes
-COOLING_MODE = 3  # Cool
-HEATING_MODE = 2  # Heat
-FAN_MODE = 1 # Fan
-OFF_MODE = 0 # OFF
-
-
-last_relay_off_time = None  # Initialize the variable to None
-
-def control_relays_based_on_state(state):
-    global current_thermostat_state, relay_control_allowed, temperature_achieved_time, last_relay_off_time
-
-    # Read current temperature and user setting
-    current_temperature = read_temperature()
-    user_setting = get_user_setting()
-
-    # Calculate the temperature difference
-    temperature_difference = abs(current_temperature - user_setting)
-
-    # Check if enough time has passed before switching to another state
-    if last_relay_off_time is not None and time.time() - last_relay_off_time < 20:
-        return  # Stay in the current state
-
-    # Reset the last_relay_off_time if we are turning on the relays
-    last_relay_off_time = None
-
-    # Check if the temperature is within the acceptable range to turn off heating and cooling modes
-    temperature_within_range = temperature_difference <= 0.5
-
-    # Turn off all relays initially
-    GPIO.output(RELAY_PINS, GPIO.HIGH)
-
-    if state == 0:  # Off
-        if relay_control_allowed:
-            GPIO.output(RELAY_PINS[0], GPIO.HIGH)  
-            GPIO.output(RELAY_PINS[0], GPIO.HIGH)  
-            GPIO.output(RELAY_PINS[0], GPIO.HIGH)  
-            GPIO.output(RELAY_PINS[0], GPIO.HIGH)  
-
-    elif state == 1:  # Fan Only
-        if relay_control_allowed:
-            GPIO.output(RELAY_PINS[0], GPIO.LOW)  # Turn on Fan relay
-            GPIO.output(RELAY_PINS[1], GPIO.HIGH)  # Turn off Cool relay
-            GPIO.output(RELAY_PINS[2], GPIO.HIGH)  # Turn off Heat relay
-            GPIO.output(RELAY_PINS[3], GPIO.HIGH)  # Turn off RevVal relay
-
-    elif state == HEATING_MODE:  # Heat
-        if relay_control_allowed and not temperature_within_range:
-            GPIO.output(RELAY_PINS[0], GPIO.LOW)  # Turn on Fan relay
-            GPIO.output(RELAY_PINS[1], GPIO.HIGH)  # Turn off Cool relay
-            GPIO.output(RELAY_PINS[2], GPIO.LOW)  # Turn on Heat relay
-            GPIO.output(RELAY_PINS[3], GPIO.HIGH)  # Turn off RevVal relay
-        elif temperature_within_range:
-            last_relay_off_time = time.time()
-
-    elif state == COOLING_MODE:  # Cool
-        if relay_control_allowed and not temperature_within_range:
-            GPIO.output(RELAY_PINS[0], GPIO.LOW)  # Turn on Fan relay
-            GPIO.output(RELAY_PINS[1], GPIO.LOW)  # Turn on Cool relay
-            GPIO.output(RELAY_PINS[2], GPIO.HIGH)  # Turn off Heat relay
-            GPIO.output(RELAY_PINS[3], GPIO.LOW)  # Turn on RevVal relay
-        elif temperature_within_range:
-            last_relay_off_time = time.time()
-
-    # For other relay(s) not mentioned in these conditions, they are turned off in all modes
-    # [...]
-
-    # Record the time when the relays were last turned off
-    if all(GPIO.input(pin) == GPIO.HIGH for pin in RELAY_PINS):
-        last_relay_off_time = time.time()
-
-
-
-
-# Update the relay states based on the initial thermostat state
-control_relays_based_on_state(current_thermostat_state)
-
-# Now you can add an API endpoint to get the current thermostat state
-@app.route('/api/get_thermostat_state', methods=['GET'])
-def get_thermostat_state():
-    if all(GPIO.input(pin) == GPIO.HIGH for pin in RELAY_PINS):
-        return jsonify({'state': "Off"})
-    else:
-        return jsonify({'state': THERMOSTAT_STATES[current_thermostat_state]})
-
-
-# Create threads to run the functions concurrently
-import threading
-
-request_user_setting_thread = threading.Thread(target=request_user_setting_and_temperature)
-update_relay_states_thread = threading.Thread(target=update_relay_states_with_delay)
-
-@app.route('/api/get_relay_states', methods=['GET'])
-def get_relay_states():
-    relay_states = {}
-    for relay_name, pin in RELAY_NAMES.items():
-        state = GPIO.input(pin)
-        relay_states[relay_name] = 'On' if state == 1 else 'Off'
-    return jsonify(relay_states)
-
-# Function to get current temperature and humidity
-def get_sensor_data():
-    humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, DHT_PIN)
-    device_id = config_data["device_id"]  # Get the device_id from the config
-    return {
-        "device_id": device_id,
-        "temperature": temperature,
-        "humidity": humidity
+    THERMOSTAT_STATES = {
+        0: 'Off',
+        2: 'Heat',
+        3: 'Cool',
+        4: 'Emergency Heat',
+        5: 'Fan',
+        6: 'Between States',
     }
 
-# Function to convert temperature from Celsius to Fahrenheit and round to the nearest 0.5 degrees
-def celsius_to_fahrenheit_rounded(temperature_celsius):
-    temperature_fahrenheit = (temperature_celsius * 9/5) + 32
-    rounded_temperature = round(temperature_fahrenheit * 2) / 2
-    return rounded_temperature
+    def enable_emergency_stop(self):
+        self.emergency_stop_enabled = True
 
-# Function to send data to the VM
-def send_data_to_vm(data):
-    response = requests.post(api_url, json=data)
-    return response.text
+    def disable_emergency_stop(self):
+        self.emergency_stop_enabled = False
 
+    def get_relay_states(self):
+        relay_states = {}
+        for pin in self.RELAY_PINS:
+            state = GPIO.input(pin)
+            relay_states[f'Relay {self.RELAY_PINS.index(pin)}'] = 'On' if state == 1 else 'Off'
+        return relay_states
+
+    def update_thermostat_state(self):
+        user_set_temperature = self.polling.get_user_setting()
+
+        if self.off_mode_counter < self.off_mode_duration:
+            # System is in the initial "Off" mode
+            self.off_mode()
+            self.off_mode_counter += 1
+        else:
+            if self.polling.current_temperature is not None:
+                # Calculate temperature difference
+                temperature_difference = abs(self.polling.current_temperature - user_set_temperature)
+
+                if self.emergency_stop_enabled:
+                    self.off_mode()
+                elif temperature_difference > self.temperature_difference_threshold:
+                    # If the temperature difference is greater than the threshold, adjust accordingly
+                    if self.polling.current_temperature < user_set_temperature:
+                        self.heat_mode(user_set_temperature)
+                    elif self.polling.current_temperature > user_set_temperature:
+                        self.cool_mode(user_set_temperature)
+                else:
+                    self.off_between_states_mode()
+            else:
+                # Handle the case when sensor reading fails
+                print("Error reading sensor data. Retrying...")
+                time.sleep(5)  # Adjust as needed
+
+    def set_relay_states(self, fan, compressor, heat_strip, rev_val):
+        GPIO.output(self.RELAY_PINS[0], GPIO.LOW if fan else GPIO.HIGH)
+        GPIO.output(self.RELAY_PINS[1], GPIO.LOW if compressor else GPIO.HIGH)
+        GPIO.output(self.RELAY_PINS[2], GPIO.LOW if heat_strip else GPIO.HIGH)
+        GPIO.output(self.RELAY_PINS[3], GPIO.LOW if rev_val else GPIO.HIGH)
+
+    def off_mode(self):
+        self.current_state = 0
+        self.set_relay_states(False, False, False, False)
+        print("Off mode")
+
+    def cool_mode(self, user_set_temperature):
+        self.current_state = 3
+        cooling_set_temperature = user_set_temperature - self.cooling_set_temperature_offset
+        self.set_relay_states(True, True, False, False)
+        self.heat_mode_timer = 0
+        self.off_between_states_counter = 0
+        print(f"Running Cool. Cooling set temperature: {cooling_set_temperature}°F")
+
+        while self.current_state == 3:
+            sensor_data = self.polling.poll_sensor_data()
+            current_temperature = sensor_data.get("temperature")
+
+            if current_temperature is not None:
+                print(f"Current Temperature: {current_temperature}°F, Cooling set temperature: {user_set_temperature}°F")
+
+                # Compare current temperature with cooling set temperature
+                if current_temperature < user_set_temperature:
+                    # Trigger off_between_states_mode
+                    self.off_between_states_mode()
+                    break  # Exit the loop when off_between_states_mode is triggered
+
+            time.sleep(1)  # Poll every 1 second
+
+    def heat_mode(self, user_set_temperature):
+        self.current_state = 2
+        current_temperature = None  # Initialize current_temperature
+
+        if self.heat_mode_timer < 400:
+            heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
+            self.set_relay_states(True, True, False, True)
+            self.off_between_states_counter = 0
+            print(f"Current Temperature: {current_temperature}°F, Heating set temperature: {user_set_temperature}°F")
+
+            self.heat_mode_timer += 1
+
+        while self.current_state == 2:
+            sensor_data = self.polling.poll_sensor_data()
+            current_temperature = sensor_data.get("temperature")
+
+            if current_temperature is not None:
+                print(f"Current Temperature: {current_temperature}°F, Heating set temperature: {user_set_temperature}°F")
+
+                # Compare rounded current temperature with heating set temperature
+                if current_temperature >= heating_set_temperature:
+                    # Trigger off_between_states_mode
+                    self.off_between_states_mode()
+                    break  # Exit the loop when off_between_states_mode is triggered
+
+            time.sleep(1)  # Poll every 1 second
+
+        else:
+            self.current_state = 4
+            heating_set_temperature = user_set_temperature
+            self.set_relay_states(True, True, True, True)
+            self.off_between_states_counter = 0
+            print(f"Current Temperature: {current_temperature}°F, E-Heating set temperature: {user_set_temperature}°F")
+
+            while self.current_state == 4:
+                sensor_data = self.polling.poll_sensor_data()
+                current_temperature = sensor_data.get("temperature")
+
+                if current_temperature is not None:
+                    print(f"Current Temperature: {current_temperature}°F, E-Heating set temperature: {user_set_temperature}°F")
+
+                    # Compare rounded current temperature with heating set temperature
+                    if current_temperature >= heating_set_temperature:
+                        # Trigger off_between_states_mode
+                        self.off_between_states_mode()
+                        break  # Exit the loop when off_between_states_mode is triggered
+
+                time.sleep(1)  # Poll every 1 second
+
+    def off_between_states_mode(self):
+        self.current_state = 6
+        self.set_relay_states(False, False, False, False)
+        print("Between States")
+        self.heat_mode_timer = 0
+
+        # Increment the counter
+        self.off_between_states_counter += 1
+
+        # Read configuration from config.json
+        with open('config.json') as config_file:
+            config = json.load(config_file)
+
+        # Extract timer durations from the configuration
+        timer_durations = config.get("timer_durations", {})
+        timer_duration = (
+            timer_durations.get("first_counter", 480) if self.off_between_states_counter == 1
+            else timer_durations.get("second_counter", 240) if self.off_between_states_counter == 2
+            else timer_durations.get("third_counter", 20)
+        )
+
+        print(f"Timer started for {timer_duration} seconds")
+
+        # Use a timer to run the code for the specified duration
+        timer = threading.Timer(timer_duration, self.stop_continuous_polling)
+        timer.start()
+
+        # Wait for the timer to complete before looping again
+        timer.join()
+
+    def stop_continuous_polling(self):
+        # Set the stop_event to stop the continuous polling loop
+        self.stop_event.set()
+        print("Timer stopped after specified duration")
+
+        # Call the update_thermostat_state method from the TemperatureController
+        self.update_thermostat_state()
+
+        print("Switched back to loop after the timer completed")
+
+    def fan_mode(self):
+        self.current_state = 5
+        self.set_relay_states(True, False, False, False)
+        self.off_between_states_counter = 0
+        print("Running Fan")
+
+    def update_config(self, updated_config):
+        # Validate and update the config_data based on the incoming data
+        for key, value in updated_config.items():
+            if key in self.config_data:
+                self.config_data[key] = value
+
+
+# Set the pin numbering mode (use GPIO.BCM or GPIO.BOARD based on your pin numbering)
+GPIO.setmode(GPIO.BCM)
+
+# Assuming you have instances of Polling and ThermostatController
+polling_instance = Polling(config_data, None, Adafruit_DHT.DHT22, config_data["dht_sensor_pin"])
+thermostat_controller_instance = ThermostatController(config_data, None, None, polling_instance)
+
+# Define a function to run the thermostat controller
+def run_thermostat_controller():
+    while True:
+        thermostat_controller_instance.update_thermostat_state()
+        time.sleep(1)  # Adjust the sleep duration as needed
+
+# Create a thread for the thermostat controller
+thermostat_thread = threading.Thread(target=run_thermostat_controller)
+thermostat_thread.daemon = True
+thermostat_thread.start()
+
+
+# Define Flask routes
 @app.route('/api/get_current_temperature', methods=['GET'])
 def get_current_temperature():
-    # Read the current temperature from your sensor and convert it to Fahrenheit with 0.5 rounding
-    sensor_data = get_sensor_data()
-    temperature = sensor_data["temperature"]
-    temperature_fahrenheit = round((temperature * 9/5) + 32, 1)
-    return jsonify({'temperature': temperature_fahrenheit})
+    sensor_data = polling_instance.poll_sensor_data()
+    current_temperature = sensor_data.get("temperature")
 
-@app.route('/api/current_data', methods=['GET'])
-def get_current_sensor_data():
-    # Get the current sensor data, convert temperature and round humidity
-    sensor_data = get_sensor_data()
-    sensor_data["temperature"] = celsius_to_fahrenheit_rounded(sensor_data["temperature"])
-    sensor_data["humidity"] = round(sensor_data["humidity"])
-    return jsonify(sensor_data)
+    if current_temperature is not None:
+        rounded_temperature = round(current_temperature * 2) / 2.0
+        return jsonify({'temperature': rounded_temperature})
+    else:
+        return jsonify({'error': 'Failed to retrieve current temperature'})
 
-def send_data_periodically():
-    while True:
-        sensor_data = get_sensor_data()
-        sensor_data["temperature"] = celsius_to_fahrenheit_rounded(sensor_data["temperature"])
-        sensor_data["humidity"] = round(sensor_data["humidity"])
-        sensor_data["device_id"] = "Downstairs"  # Set your device_id
-        sensor_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:M")
-        
-        response = send_data_to_vm(sensor_data)
-        print(response)  # Print the response to the terminal for monitoring
-        
-        # Sleep for 2.5 minutes (adjust as needed)
-        time.sleep(150)
+@app.route('/api/get_thermostat_state', methods=['GET'])
+def fetch_thermostat_state():
+    thermostat_state = thermostat_controller_instance.THERMOSTAT_STATES.get(thermostat_controller_instance.current_state, 'Unknown')
+    return jsonify(state=thermostat_state)
 
 
+@app.route('/api/emergency_stop', methods=['GET', 'POST'])
+def control_emergency_stop():
+    if request.method == 'GET':
+        return jsonify({'emergency_stop_enabled': thermostat_controller_instance.emergency_stop_enabled})
+    elif request.method == 'POST':
+        if request.json.get('enable', False):
+            thermostat_controller_instance.enable_emergency_stop()
+        else:
+            thermostat_controller_instance.disable_emergency_stop()
+        return jsonify({'message': 'Emergency Stop ' + ('Enabled' if thermostat_controller_instance.emergency_stop_enabled else 'Disabled')})
 
-if __name__ == '__main__':
-    request_user_setting_thread.start()
-    update_relay_states_thread = threading.Thread(target=update_relay_states_with_delay)  # Use the modified function
-    update_relay_states_thread.start()
-    send_data_thread = Thread(target=send_data_periodically)
-    send_data_thread.daemon = True  # Allow the thread to exit when the main program exits
-    send_data_thread.start()
-    app.run(host='0.0.0.0', port=5001)
+@app.route('/api/get_config', methods=['GET'])
+def get_config():
+    return jsonify(config_data)
+
+@app.route('/api/update_config', methods=['POST'])
+def update_config():
+    try:
+        updated_data = request.json
+
+        # Update the global config_data
+        for key, value in updated_data.items():
+            if key in config_data:
+                config_data[key] = value
+
+        # Update the ThermostatController instance
+        thermostat_controller_instance.update_config(updated_data)
+
+        # Save the updated config_data to config.json
+        with open('config.json', 'w') as config_file:
+            json.dump(config_data, config_file, indent=4)
+
+        return jsonify(success=True, message='Configuration updated successfully')
+
+    except Exception as e:
+        return jsonify(success=False, message=f'Error updating configuration: {str(e)}')
+
+
+
+# Run the Flask app
+app.run(host='0.0.0.0', port=5001)
