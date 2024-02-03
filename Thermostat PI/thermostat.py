@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 
+
 app = Flask(__name__)
 CORS(app)
  
@@ -22,8 +23,15 @@ class Polling:
         self.DHT_SENSOR = DHT_SENSOR
         self.DHT_PIN = DHT_PIN
         self.device_id = config_data.get("device_id")
+        self.data_send_timer = threading.Timer(120, self.send_data_periodically)
+        self.data_send_timer.start()
+        self.user_set_temperature = None
+        self.user_set_temperature_last_updated = time.time()
+        self.fetched_user_setting = False
 
-
+        # Check if the user_set_temperature is already available in memory
+        if self.user_set_temperature is None:
+            self.user_set_temperature = self.get_user_setting()
 
     def poll_sensor_data(self, max_retries=3, delay_between_retries=2):
         retries = 0
@@ -41,23 +49,70 @@ class Polling:
         print("Max retries reached. Unable to read sensor data.")
         return {"temperature": None, "humidity": None}
 
+    def send_data_periodically(self):
+        # Get the latest sensor data
+        sensor_data = self.poll_sensor_data()
 
-    def get_user_setting(self):
+        # If sensor data is available, send it to the server
+        if sensor_data["temperature"] is not None and sensor_data["humidity"] is not None:
+            self.send_data_to_server(sensor_data["temperature"], sensor_data["humidity"])
+
+        # Set up the timer for the next data send
+        self.data_send_timer = threading.Timer(120, self.send_data_periodically)
+        self.data_send_timer.start()
+
+    def send_data_to_server(self, temperature, humidity):
         try:
-            response = requests.get(self.config_data['vm-server'] + '/api/get_last_user_setting')
-            if response.status_code == 200:
-                data = response.json()
-                user_setting = data.get('last_user_setting')
-                if user_setting is not None:
-                    return float(user_setting)
-                else:
-                    print('get_user_setting: User setting not found in response')
-            else:
-                print('get_user_setting: Failed to fetch user setting:', response.status_code)
-            time.sleep(30)
+            data = {
+                "device_id": self.device_id,
+                "temperature": temperature,
+                "humidity": humidity
+            }
+            response = requests.post(self.config_data['vm-server'] + '/api/receive_data', json=data)
+            if response.status_code != 200:
+                print(f"Failed to send data to server. Status Code: {response.status_code}")
         except requests.exceptions.RequestException as e:
-            print(f'get_user_setting: Error fetching user setting: {str(e)}')
-            time.sleep(10)        
+            print(f"Error sending data to server: {str(e)}")
+
+    def get_user_setting(self, max_retries=3, retry_delay=1, default_value=72):
+        # If user_set_temperature is already available, return it
+        if self.user_set_temperature is not None:
+            return self.user_set_temperature
+
+        retries = 0
+        while retries < max_retries:
+            try:
+                response = requests.get(self.config_data['vm-server'] + '/api/get_last_user_setting')
+                if response.status_code == 200:
+                    data = response.json()
+                    user_setting = data.get('last_user_setting')
+                    if user_setting is not None:
+                        # Store the fetched user_set_temperature in memory
+                        self.user_set_temperature = float(user_setting)
+                        self.user_set_temperature_last_updated = time.time()
+                        self.fetched_user_setting = True  # Set the flag to True after fetching
+                        return self.user_set_temperature
+                    else:
+                        print('get_user_setting: User setting not found in response')
+                else:
+                    print('get_user_setting: Failed to fetch user setting:', response.status_code)
+            except requests.exceptions.RequestException as e:
+                print(f'get_user_setting: Error fetching user setting: {str(e)}')
+
+            # Increment the retry counter
+            retries += 1
+
+            # Sleep before the next retry
+            time.sleep(retry_delay)
+
+        print('get_user_setting: Max retries reached. Unable to fetch user setting. Returning default value:', default_value)
+        return default_value
+    
+    def update_user_set_temperature(self, new_temperature):
+        print(f"Received new temperature from frontend: {new_temperature}")
+        self.user_set_temperature = new_temperature
+        self.user_set_temperature_last_updated = time.time()
+
 
 class ThermostatController:
     def __init__(self, config_data, DHT_SENSOR, DHT_PIN, polling):
@@ -98,6 +153,18 @@ class ThermostatController:
     def disable_emergency_stop(self):
         self.emergency_stop_enabled = False
 
+    def send_mode_update(self, mode):
+        try:
+            data = {'device_id': 'Thermostat', 'mode': mode}
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post('http://SERVER_IP:5000/api/update_mode', json=data, headers=headers)
+            if response.status_code == 200:
+                print(f"Mode update sent successfully. Mode: {mode}")
+            else:
+                print(f"Failed to send mode update. Status code: {response.status_code}")
+        except Exception as e:
+            print(f"Error sending mode update: {e}")
+
     def get_relay_states(self):
         relay_states = {}
         for pin in self.RELAY_PINS:
@@ -106,7 +173,7 @@ class ThermostatController:
         return relay_states
 
     def update_thermostat_state(self):
-        user_set_temperature = self.polling.get_user_setting()
+        user_set_temperature = self.polling.user_set_temperature
 
         if self.off_mode_counter < self.off_mode_duration:
             # System is in the initial "Off" mode
@@ -142,21 +209,26 @@ class ThermostatController:
         self.current_state = 0
         self.set_relay_states(False, False, False, False)
         print("Off mode")
+        self.off_mode_counter += 10
+        self.send_mode_update("off")
 
     def cool_mode(self, user_set_temperature):
         self.current_state = 3
-        cooling_set_temperature = user_set_temperature - self.cooling_set_temperature_offset
-        self.set_relay_states(True, True, False, False)
-        self.heat_mode_timer = 0
         self.off_between_states_counter = 0
-        print(f"Running Cool. Cooling set temperature: {cooling_set_temperature}°F")
+        print("Running Cool")
+        self.send_mode_update("cool")
 
         while self.current_state == 3:
+            user_set_temperature = self.polling.get_user_setting()
+            cooling_set_temperature = user_set_temperature - self.cooling_set_temperature_offset
+            self.set_relay_states(True, True, False, False)
+            print(f"Cooling set temperature: {cooling_set_temperature}°F")
+
             sensor_data = self.polling.poll_sensor_data()
             current_temperature = sensor_data.get("temperature")
 
             if current_temperature is not None:
-                print(f"Current Temperature: {current_temperature}°F, Cooling set temperature: {user_set_temperature}°F")
+                print(f"Current Temperature: {current_temperature}°F")
 
                 # Compare current temperature with cooling set temperature
                 if current_temperature < user_set_temperature:
@@ -164,26 +236,25 @@ class ThermostatController:
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
-            time.sleep(1)  # Poll every 1 second
+            time.sleep(10)  # Poll every 1 second
 
     def heat_mode(self, user_set_temperature):
         self.current_state = 2
-        current_temperature = None  # Initialize current_temperature
-
-        if self.heat_mode_timer < 400:
-            heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
-            self.set_relay_states(True, True, False, True)
-            self.off_between_states_counter = 0
-            print(f"Current Temperature: {current_temperature}°F, Heating set temperature: {user_set_temperature}°F")
-
-            self.heat_mode_timer += 1
+        self.off_between_states_counter = 0
+        print("Running Heat")
+        self.send_mode_update("heat")
 
         while self.current_state == 2:
+            user_set_temperature = self.polling.get_user_setting()
+            heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
+            self.set_relay_states(True, True, False, True)
+            print(f"Heating set temperature: {heating_set_temperature}°F")
+
             sensor_data = self.polling.poll_sensor_data()
             current_temperature = sensor_data.get("temperature")
 
             if current_temperature is not None:
-                print(f"Current Temperature: {current_temperature}°F, Heating set temperature: {user_set_temperature}°F")
+                print(f"Current Temperature: {current_temperature}°F")
 
                 # Compare rounded current temperature with heating set temperature
                 if current_temperature >= heating_set_temperature:
@@ -191,29 +262,36 @@ class ThermostatController:
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
-            time.sleep(1)  # Poll every 1 second
+                # Check if it's time to switch to emergency heat
+                if self.heat_mode_timer >= 480:  # 8 minutes * 60 seconds
+                    self.send_mode_update("emergency_heat")
+                    self.current_state = 4
+                    heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
+                    self.set_relay_states(True, True, True, True)
+                    self.off_between_states_counter = 0
+                    print(f"E-Heating set temperature: {heating_set_temperature}°F")
 
-        else:
-            self.current_state = 4
-            heating_set_temperature = user_set_temperature
-            self.set_relay_states(True, True, True, True)
-            self.off_between_states_counter = 0
-            print(f"Current Temperature: {current_temperature}°F, E-Heating set temperature: {user_set_temperature}°F")
+                    while self.current_state == 4:
+                        user_set_temperature = self.polling.get_user_setting()
+                        heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
+                        sensor_data = self.polling.poll_sensor_data()
+                        current_temperature = sensor_data.get("temperature")
 
-            while self.current_state == 4:
-                sensor_data = self.polling.poll_sensor_data()
-                current_temperature = sensor_data.get("temperature")
+                        if current_temperature is not None:
+                            print(f"Current Temperature: {current_temperature}°F")
 
-                if current_temperature is not None:
-                    print(f"Current Temperature: {current_temperature}°F, E-Heating set temperature: {user_set_temperature}°F")
+                            # Compare rounded current temperature with heating set temperature
+                            if current_temperature >= heating_set_temperature:
+                                # Trigger off_between_states_mode
+                                self.off_between_states_mode()
+                                self.send_mode_update("between_states")
+                                break
 
-                    # Compare rounded current temperature with heating set temperature
-                    if current_temperature >= heating_set_temperature:
-                        # Trigger off_between_states_mode
-                        self.off_between_states_mode()
-                        break  # Exit the loop when off_between_states_mode is triggered
+            time.sleep(10)  # Poll every 1 second
 
-                time.sleep(1)  # Poll every 1 second
+# The other methods can be similarly modified
+
+
 
     def off_between_states_mode(self):
         self.current_state = 6
@@ -268,6 +346,7 @@ class ThermostatController:
                 self.config_data[key] = value
 
 
+
 # Set the pin numbering mode (use GPIO.BCM or GPIO.BOARD based on your pin numbering)
 GPIO.setmode(GPIO.BCM)
 
@@ -279,7 +358,7 @@ thermostat_controller_instance = ThermostatController(config_data, None, None, p
 def run_thermostat_controller():
     while True:
         thermostat_controller_instance.update_thermostat_state()
-        time.sleep(1)  # Adjust the sleep duration as needed
+        time.sleep(20)  # Adjust the sleep duration as needed
 
 # Create a thread for the thermostat controller
 thermostat_thread = threading.Thread(target=run_thermostat_controller)
@@ -288,6 +367,7 @@ thermostat_thread.start()
 
 
 # Define Flask routes
+
 @app.route('/api/get_current_temperature', methods=['GET'])
 def get_current_temperature():
     sensor_data = polling_instance.poll_sensor_data()
@@ -341,6 +421,24 @@ def update_config():
 
     except Exception as e:
         return jsonify(success=False, message=f'Error updating configuration: {str(e)}')
+
+@app.route('/api/get_last_user_setting', methods=['GET'])
+def get_last_user_setting():
+    return jsonify({'user_set_temperature': polling_instance.user_set_temperature})
+
+
+@app.route('/api/update_user_set_temperature', methods=['POST'])
+def update_user_set_temperature():
+    try:
+        new_temperature = request.json.get('temperature')  # Updated key to 'temperature'
+        polling_instance.update_user_set_temperature(new_temperature)
+        return jsonify({'message': 'User set temperature updated successfully'})
+    except Exception as e:
+        print(f"Error updating user set temperature: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+
+
 
 
 

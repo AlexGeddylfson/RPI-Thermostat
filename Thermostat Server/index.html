@@ -94,7 +94,7 @@
 
 .set_temperature_btn:hover {
     background-color: #333; /* Change background color on hover */
-}
+}             
 
         h1 {
             text-align: center;
@@ -130,7 +130,7 @@
         .temperature-value {
             font-size: 20px;
         }
-
+        
 
         .controls {
             display: flex;
@@ -220,6 +220,8 @@
         <h3>Downstairs: <span class="current-value" span id="temperature_value"> </span> </h3>
         <h5>Office: <span class="current-value2" span id="d_temperature_value"> </span> </h5>
         <h5>Olivia's Room: <span class="current-value2" span id="o_temperature_value"> </span> </h5>
+        <h5>MBR: <span class="current-value2" span id="MBR_temperature_value"> </span> </h5>
+        <h5>Upstairs: <span class="current-value2" span id="ups_temperature_value"> </span> </h5>
         <div class="temperature-box">
             <div class="controls">
                 <span class="arrow-button" id="decrease_temperature">&#9660;</span>
@@ -227,9 +229,9 @@
                 <span class="arrow-button" id="increase_temperature">&#9650;</span>
             </div>
         </div>
+<!-- Display the thermostat state here -->
+<p><span id="thermostat_state"></span></p>
 
-        <!-- Display the thermostat state here -->
-        <p><span id="thermostat_state"></span></p>
 
         <button id="set_temperature_btn" style="background-color: black; color: white; border: 2px solid white; border-radius: 8px; padding: 10px 20px; font-size: 16px; cursor: pointer; transition: background-color 0.3s ease;">Set Temperature</button>
     </div>
@@ -242,110 +244,105 @@
 <button id="toggle_emergency_stop">Toggle</button>
     </div>
 
-<script>
 
-
-
-
-            document.getElementById('menu-icon').addEventListener('click', function () {
-            var menu = document.querySelector('.menu');
-            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-        });
-
+    <script>
+    // Initialize global variable for the current temperature
+    let currentTemperature = 72; // Initial value
 
     // Function to update the displayed temperature
     function updateDisplayedTemperature(temperatureValue) {
         document.getElementById('current_temperature').innerText = Math.round(temperatureValue) + '°F';
     }
 
-// Get the initial temperature value
-        var currentTemperature = 72; // Initial value
+    // Event listener for the menu icon
+    document.getElementById('menu-icon').addEventListener('click', function () {
+        var menu = document.querySelector('.menu');
+        // Toggle the display property between 'block' and 'none'
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+    });
 
-        // Add click event listeners to increase and decrease temperature
-        document.getElementById('increase_temperature').addEventListener('click', function () {
-            currentTemperature += 1;
-            if (currentTemperature > 82) {
-                currentTemperature = 82;
-            }
-            updateDisplayedTemperature(currentTemperature);
-        });
+    // Event listeners to increase and decrease temperature
+    document.getElementById('increase_temperature').addEventListener('click', function () {
+        currentTemperature += 1;
+        if (currentTemperature > 82) {
+            currentTemperature = 82;
+        }
+        updateDisplayedTemperature(currentTemperature);
+    });
 
-        document.getElementById('decrease_temperature').addEventListener('click', function () {
-            currentTemperature -= 1;
-            if (currentTemperature < 62) {
-                currentTemperature = 62;
-            }
-            updateDisplayedTemperature(currentTemperature);
-        });
-
-    // Function to update the displayed emergency stop status
-function updateEmergencyStopStatus(status) {
-    const statusElement = document.getElementById('emergency_stop_status');
-    statusElement.innerText = `Status: ${status}`;
-}
-// Declare a variable to track the emergency stop state
-let emergencyStopEnabled = false;
-
-// Function to toggle the emergency stop state
-function toggleEmergencyStop() {
-    fetch('http://RPITHERMOSTATIP:5001/api/emergency_stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enable: !emergencyStopEnabled }), // Toggle the state
-    })
-        .then(response => response.json())
-        .then(data => {
-            const message = data.message;
-            emergencyStopEnabled = !emergencyStopEnabled; // Update the variable based on the response
-            updateEmergencyStopStatus(emergencyStopEnabled ? 'Enabled' : 'Disabled');
-            console.log(message);
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-// Function to check and set the initial state of the emergency stop switch
-function checkEmergencyStopState() {
-    fetch('http://RPITHERMOSTATIP:5001/api/emergency_stop', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-        .then(response => response.json())
-        .then(data => {
-            emergencyStopEnabled = data.emergency_stop_enabled;
-            const initialStatus = emergencyStopEnabled ? 'Enabled' : 'Disabled';
-            updateEmergencyStopStatus(initialStatus);
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-
-
-
-// Add an event listener to the toggle button
-document.getElementById('toggle_emergency_stop').addEventListener('click', toggleEmergencyStop);
-
-// Fetch and update the initial state of the emergency stop switch
-checkEmergencyStopState();
-
-
-    // Function to fetch and display the last user setting
-    function fetchUserSetting() {
-        fetch('http://SERVERIP:5000/api/get_last_user_setting', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+    document.getElementById('decrease_temperature').addEventListener('click', function () {
+        currentTemperature -= 1;
+        if (currentTemperature < 62) {
+            currentTemperature = 62;
+        }
+        updateDisplayedTemperature(currentTemperature);
+    });
+    
+        // Function to update the displayed emergency stop status
+        function updateEmergencyStopStatus(status) {
+            const statusElement = document.getElementById('emergency_stop_status');
+            statusElement.innerText = `Status: ${status}`;
+        }
+    
+        // Declare a variable to track the emergency stop state
+        let emergencyStopEnabled = false;
+    
+        // Function to toggle the emergency stop state
+        function toggleEmergencyStop() {
+            fetch('http://THERMOSTATt:5001/api/emergency_stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enable: !emergencyStopEnabled }), // Toggle the state
+            })
             .then(response => response.json())
             .then(data => {
-                // Update the "current_temperature" with the user setting
-                const currentTemperature = parseInt(data.last_user_setting);
-                updateDisplayedTemperature(currentTemperature);
+                const message = data.message;
+                emergencyStopEnabled = !emergencyStopEnabled; // Update the variable based on the response
+                updateEmergencyStopStatus(emergencyStopEnabled ? 'Enabled' : 'Disabled');
+                console.log(message);
             })
             .catch(error => {
                 console.error('Error:', error);
             });
-    }
-
-    // Function to fetch and display the thermostat state
-    function fetchThermostatState() {
-        fetch('http://RPITHERMOSTATIP:5001/api/get_thermostat_state', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+        }
+    
+        // Function to check and set the initial state of the emergency stop switch
+        function checkEmergencyStopState() {
+            fetch('http://THERMOSTATt:5001/api/emergency_stop', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                emergencyStopEnabled = data.emergency_stop_enabled;
+                const initialStatus = emergencyStopEnabled ? 'Enabled' : 'Disabled';
+                updateEmergencyStopStatus(initialStatus);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    
+        // Event listener for the toggle button
+        document.getElementById('toggle_emergency_stop').addEventListener('click', toggleEmergencyStop);
+    
+        // Fetch and update the initial state of the emergency stop switch
+        checkEmergencyStopState();
+    
+        // Function to fetch and display the last user setting from the thermostat
+        function fetchUserSetting() {
+            fetch('http://THERMOSTATt:5001/api/get_last_user_setting', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                // Update the "current_temperature" with the user setting
+                const userSetTemperature = parseFloat(data.user_set_temperature);
+                updateDisplayedTemperature(userSetTemperature);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    
+        // Function to fetch and display the thermostat state
+        function fetchThermostatState() {
+            fetch('http://THERMOSTATt:5001/api/get_thermostat_state', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
             .then(response => response.json())
             .then(data => {
                 const thermostatState = data.state;
@@ -354,11 +351,11 @@ checkEmergencyStopState();
             .catch(error => {
                 console.error('Error:', error);
             });
-    }
-
-    // Function to fetch and display the current temperature
-    function fetchCurrentTemperature() {
-        fetch('http://RPITHERMOSTATIP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+        }
+    
+        // Function to fetch and display the current temperature
+        function fetchCurrentTemperature() {
+            fetch('http://THERMOSTATt:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('temperature_value').innerText = data.temperature + '°F';
@@ -366,10 +363,11 @@ checkEmergencyStopState();
             .catch(error => {
                 console.error('Error:', error);
             });
-    }
-        // Function to fetch and display the current temperature from 'up.stairs'
+        }
+    
+        // Function to fetch and display the current temperature from 'PROBE_2'
         function fetchCurrentDTemperature() {
-        fetch('http://PROBE1IP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            fetch('http://PROBE_2:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('d_temperature_value').innerText = data.temperature + '°F';
@@ -377,11 +375,11 @@ checkEmergencyStopState();
             .catch(error => {
                 console.error('Error:', error);
             });
-    }
-
-            // Function to fetch and display the current temperature from 'door.bell'
-            function fetchCurrentOTemperature() {
-        fetch('http://PROBE2IP:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+        }
+    
+        // Function to fetch and display the current temperature from 'PROBE_!'
+        function fetchCurrentOTemperature() {
+            fetch('http://PROBE_!:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('o_temperature_value').innerText = data.temperature + '°F';
@@ -389,73 +387,116 @@ checkEmergencyStopState();
             .catch(error => {
                 console.error('Error:', error);
             });
-    }
-
-
-    // Add click event listeners to set the temperature
-    document.getElementById('set_temperature_btn').addEventListener('click', function () {
-        var newTemperatureSetpoint = currentTemperature; // Define 'currentTemperature' before use
-        fetch('http://SERVERIP:5000/update_temperature', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ temperature: newTemperatureSetpoint })
-        })
+        }
+    
+        // Function to fetch and display the current temperature from 'mbr'
+        function fetchCurrentMBRTemperature() {
+            fetch('http://PROBE_3:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
             .then(response => response.json())
             .then(data => {
-                console.log(data.message);
+                document.getElementById('MBR_temperature_value').innerText = data.temperature + '°F';
             })
             .catch(error => {
                 console.error('Error:', error);
             });
-    });
-
-    // Fetch and update the thermostat state initially
-    fetchThermostatState();
-    // Poll the thermostat state every 2 minutes
-    setInterval(fetchThermostatState, 2000);
-
-    // Fetch and update the current temperature initially
-    fetchCurrentTemperature();
-    // Poll the current temperature every 20 seconds
-    setInterval(fetchCurrentTemperature, 2000);
-
-    // Fetch and update the current temperature initially
-   fetchCurrentOTemperature();
-    // Poll the current temperature every 20 seconds
-    setInterval(fetchCurrentOTemperature, 2000);
-
-
+        }
+    
+        // Function to fetch and display the current temperature from 'ups'
+        function fetchCurrentupsTemperature() {
+            fetch('http://PROBE_4:5001/api/get_current_temperature', { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('ups_temperature_value').innerText = data.temperature + '°F';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    
+        // Event listener for the set temperature button
+        document.getElementById('set_temperature_btn').addEventListener('click', function () {
+            var newTemperatureSetpoint = currentTemperature; // Use the globally defined currentTemperature
+    
+            console.log('New Temperature Setpoint:', newTemperatureSetpoint); // Log the value for debugging
+    
+            // Create a function to handle the temperature update for both endpoints
+            function updateTemperature(endpoint) {
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ temperature: newTemperatureSetpoint })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }
+    
+            // Update temperature for 'SERVER_IP'
+            updateTemperature('http://SERVER_IP:5000/update_temperature');
+    
+            // Update temperature for 'THERMOSTATt'
+            updateTemperature('http://THERMOSTATt:5001/api/update_user_set_temperature');
+        });
+    
+        // Fetch and update the thermostat state initially
+        fetchThermostatState();
+        // Poll the thermostat state every 20 seconds
+        setInterval(fetchThermostatState, 20000);
+    
         // Fetch and update the current temperature initially
-    fetchCurrentDTemperature();
-    // Poll the current temperature every 20 seconds
-    setInterval(fetchCurrentDTemperature, 2000);
-
-    // Fetch and update the user setting initially
-    fetchUserSetting();
-    // Poll the user setting every 2.5 minutes
-    setInterval(fetchUserSetting, 15000);
-
-// Function to update the displayed time
-function updateTime() {
-    var now = new Date();
-    var hours = now.getHours();
-    var ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = (hours % 12) || 12; // Convert hours to 12-hour format
-
-    var minutes = now.getMinutes().toString().padStart(2, '0');
-    var seconds = now.getSeconds().toString().padStart(2, '0');
-
-    var timeString = hours + ':' + minutes + ampm;
-    document.getElementById('current_time').innerText = timeString;
-}
-
-    // Update time initially
-    updateTime();
-    // Update time every second
-    setInterval(updateTime, 1000);
-
-
-
-</script>
+        fetchCurrentTemperature();
+        // Poll the current temperature every 20 seconds
+        setInterval(fetchCurrentTemperature, 20000);
+    
+        // Fetch and update the current temperature initially
+        fetchCurrentOTemperature();
+        // Poll the current temperature every 20 seconds
+        setInterval(fetchCurrentOTemperature, 20000);
+    
+        // Fetch and update the current temperature initially
+        fetchCurrentupsTemperature();
+        // Poll the current temperature every 20 seconds
+        setInterval(fetchCurrentupsTemperature, 20000);
+    
+        // Fetch and update the current temperature initially
+        fetchCurrentMBRTemperature();
+        // Poll the current temperature every 20 seconds
+        setInterval(fetchCurrentMBRTemperature, 20000);
+    
+        // Fetch and update the current temperature initially
+        fetchCurrentDTemperature();
+        // Poll the current temperature every 20 seconds
+        setInterval(fetchCurrentDTemperature, 20000);
+    
+        // Fetch and update the user setting initially
+        fetchUserSetting();
+    
+        // Poll the user setting every 2 minutes (120,000 milliseconds)
+        setInterval(fetchUserSetting, 120000);
+    
+        // Function to update the displayed time
+        function updateTime() {
+            var now = new Date();
+            var hours = now.getHours();
+            var ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = (hours % 12) || 12; // Convert hours to 12-hour format
+    
+            var minutes = now.getMinutes().toString().padStart(2, '0');
+            var seconds = now.getSeconds().toString().padStart(2, '0');
+    
+            var timeString = hours + ':' + minutes + ampm;
+            document.getElementById('current_time').innerText = timeString;
+        }
+    
+        // Update time initially
+        updateTime();
+        // Update time every second
+        setInterval(updateTime, 1000);
+    </script>
+    
 </body>
 </html>
