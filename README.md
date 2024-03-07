@@ -45,7 +45,8 @@ CREATE TABLE sensor_data (
     device_id VARCHAR(255),
     temperature DECIMAL(5, 2),
     humidity DECIMAL(5, 2),
-    timestamp TIMESTAMP
+    timestamp TIMESTAMP,
+    ip_address VARCHAR(15)
 );
 ```
 -- Table to store user-set temperature values
