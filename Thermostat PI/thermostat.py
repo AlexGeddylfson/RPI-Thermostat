@@ -157,7 +157,7 @@ class ThermostatController:
         try:
             data = {'device_id': 'Thermostat', 'mode': mode}
             headers = {'Content-Type': 'application/json'}
-            response = requests.post('http://SERVER_IP:5000/api/update_mode', json=data, headers=headers)
+            response = requests.post('http://robinson.home:5000/api/update_mode', json=data, headers=headers)
             if response.status_code == 200:
                 print(f"Mode update sent successfully. Mode: {mode}")
             else:
@@ -193,6 +193,7 @@ class ThermostatController:
                     elif self.polling.current_temperature > user_set_temperature:
                         self.cool_mode(user_set_temperature)
                 else:
+                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
             else:
                 # Handle the case when sensor reading fails
@@ -284,7 +285,6 @@ class ThermostatController:
                             if current_temperature >= heating_set_temperature:
                                 # Trigger off_between_states_mode
                                 self.off_between_states_mode()
-                                self.send_mode_update("between_states")
                                 break
 
             time.sleep(10)  # Poll every 1 second
@@ -298,9 +298,14 @@ class ThermostatController:
         self.set_relay_states(False, False, False, False)
         print("Between States")
         self.heat_mode_timer = 0
+        # self.send_mode_update("between_states")
 
         # Increment the counter
         self.off_between_states_counter += 1
+
+    # Check if the mode update has already been sent for the current cycle
+        if self.off_between_states_counter == 1:
+            self.send_mode_update("between_states")
 
         # Read configuration from config.json
         with open('config.json') as config_file:

@@ -5,6 +5,7 @@ from datetime import datetime
 from flask_cors import CORS
 import json
 from flask_caching import Cache
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -37,7 +38,7 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 30})
 @app.route('/')
 def index():
     cursor = db.cursor(dictionary=True)
-    select_query = "SELECT device_id, temperature, humidity, timestamp FROM sensor_data"
+    select_query = "SELECT device_id, temperature, humidity, timestamp, ip_address FROM sensor_data"
     cursor.execute(select_query)
     data = cursor.fetchall()
     cursor.close()
@@ -72,12 +73,45 @@ def receive_data():
     if not data:
         return jsonify({'message': 'Invalid data format'}), 400
 
+    # Get the IP address from the incoming request
+    ip_address = request.remote_addr
+
     cursor = db.cursor()
-    insert_query = "INSERT INTO sensor_data (device_id, temperature, humidity, timestamp) VALUES (%s, %s, %s, NOW())"
-    cursor.execute(insert_query, (data.get('device_id'), data.get('temperature'), data.get('humidity')))
+
+    # Generate server timestamp with seconds only
+    server_timestamp = datetime.utcnow().replace(microsecond=0)
+
+    insert_query = "INSERT INTO sensor_data (device_id, temperature, humidity, timestamp, ip_address) VALUES (%s, %s, %s, %s, %s)"
+    cursor.execute(insert_query, (data.get('device_id'), data.get('temperature'), data.get('humidity'), server_timestamp, ip_address))
     db.commit()
     cursor.close()
+
     return jsonify(data)
+
+@app.route('/app')
+def app_dashboard():
+    try:
+        cursor = db.cursor(dictionary=True)
+        select_query = (
+            "SELECT device_id, MAX(ip_address) AS ip_address "
+            "FROM sensor_data "
+            "WHERE timestamp >= NOW() - INTERVAL 24 HOUR "
+            "GROUP BY device_id "
+            "HAVING ip_address IS NOT NULL AND ip_address != ''"
+        )
+        cursor.execute(select_query)
+        devices_data = cursor.fetchall()
+        cursor.close()
+
+        # Extract device names and IP addresses
+        devices_json = [{'device_id': device['device_id'], 'ip_address': device['ip_address']} for device in devices_data]
+
+        # Return JSON response
+        return jsonify(devices_json)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/update_mode', methods=['POST'])
 def update_mode():
