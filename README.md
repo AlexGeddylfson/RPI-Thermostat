@@ -17,7 +17,8 @@ On your VM/Physical machine you will want to install apache/nginx, mysql, and py
 2. ```sudo apt install apache2 ibapache2-mod-wsgi python3 libexpat1 python3-pip```
 3. ```sudo a2enconf mod-wsgi | sudo a2enmod cgi``` to allow the wsgi mod to run in apache
 4. ```sudo systemctl restart apache2``` to restart apache and complete that side of the configuration. 
-5. You will copy the contents of the Thermostat Server and modify the config.json to match your environment. Then either run the server.py or add it as a service by running these commands. ```sudo nano /etc/systemd/system/thermostatserver.service``` | adding this into the service file. 
+5. You will copy the contents of the Thermostat Server and modify the config.json to match your environment. Then either run the server.py or add it as a service by running these commands. In lieu of the legacy HTML included in this, you can use the build of the web app that is included in the Thermostat-App [here](https://github.com/AlexGeddylfson/Thermostat-App/releases). This will unify the app and web app making it one smooth experience.
+6. ```sudo nano /etc/systemd/system/thermostatserver.service``` | adding this into the service file. 
 ```
 [Unit]
 Description=Thermostat Service
@@ -45,7 +46,8 @@ CREATE TABLE sensor_data (
     device_id VARCHAR(255),
     temperature DECIMAL(5, 2),
     humidity DECIMAL(5, 2),
-    timestamp TIMESTAMP
+    timestamp TIMESTAMP,
+    ip_address VARCHAR(15)
 );
 ```
 -- Table to store user-set temperature values
