@@ -193,7 +193,6 @@ class ThermostatController:
                     elif self.polling.current_temperature > user_set_temperature:
                         self.cool_mode(user_set_temperature)
                 else:
-                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
             else:
                 # Handle the case when sensor reading fails
@@ -234,6 +233,8 @@ class ThermostatController:
                 # Compare current temperature with cooling set temperature
                 if current_temperature < user_set_temperature:
                     # Trigger off_between_states_mode
+                    self.off_between_states_update_sent = False
+                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
@@ -260,6 +261,8 @@ class ThermostatController:
                 # Compare rounded current temperature with heating set temperature
                 if current_temperature >= heating_set_temperature:
                     # Trigger off_between_states_mode
+                    self.off_between_states_update_sent = False
+                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
@@ -284,21 +287,18 @@ class ThermostatController:
                             # Compare rounded current temperature with heating set temperature
                             if current_temperature >= heating_set_temperature:
                                 # Trigger off_between_states_mode
+                                self.off_between_states_update_sent = False
+                                self.send_mode_update("between_states")
                                 self.off_between_states_mode()
                                 break
 
             time.sleep(10)  # Poll every 1 second
-
-# The other methods can be similarly modified
-
-
 
     def off_between_states_mode(self):
         self.current_state = 6
         self.set_relay_states(False, False, False, False)
         print("Between States")
         self.heat_mode_timer = 0
-        # self.send_mode_update("between_states")
 
         # Increment the counter
         self.off_between_states_counter += 1
@@ -331,7 +331,7 @@ class ThermostatController:
     def stop_continuous_polling(self):
         # Set the stop_event to stop the continuous polling loop
         self.stop_event.set()
-        print("Timer stopped after specified duration")
+        print("Timer stopped after duration")
 
         # Call the update_thermostat_state method from the TemperatureController
         self.update_thermostat_state()
