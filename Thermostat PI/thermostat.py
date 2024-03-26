@@ -179,6 +179,7 @@ class ThermostatController:
             # System is in the initial "Off" mode
             self.off_mode()
             self.off_mode_counter += 1
+            
         else:
             if self.polling.current_temperature is not None:
                 # Calculate temperature difference
@@ -209,6 +210,7 @@ class ThermostatController:
         self.current_state = 0
         self.set_relay_states(False, False, False, False)
         print("Off mode")
+        self.off_between_states_counter = 0
         self.off_mode_counter += 10
         self.send_mode_update("off")
 
@@ -233,8 +235,6 @@ class ThermostatController:
                 # Compare current temperature with cooling set temperature
                 if current_temperature < user_set_temperature:
                     # Trigger off_between_states_mode
-                    self.off_between_states_update_sent = False
-                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
@@ -261,8 +261,6 @@ class ThermostatController:
                 # Compare rounded current temperature with heating set temperature
                 if current_temperature >= heating_set_temperature:
                     # Trigger off_between_states_mode
-                    self.off_between_states_update_sent = False
-                    self.send_mode_update("between_states")
                     self.off_between_states_mode()
                     break  # Exit the loop when off_between_states_mode is triggered
 
@@ -272,7 +270,6 @@ class ThermostatController:
                     self.current_state = 4
                     heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
                     self.set_relay_states(True, True, True, True)
-                    self.off_between_states_counter = 0
                     print(f"E-Heating set temperature: {heating_set_temperature}°F")
 
                     while self.current_state == 4:
@@ -287,8 +284,6 @@ class ThermostatController:
                             # Compare rounded current temperature with heating set temperature
                             if current_temperature >= heating_set_temperature:
                                 # Trigger off_between_states_mode
-                                self.off_between_states_update_sent = False
-                                self.send_mode_update("between_states")
                                 self.off_between_states_mode()
                                 break
 
@@ -303,10 +298,8 @@ class ThermostatController:
         # Increment the counter
         self.off_between_states_counter += 1
 
-    # Check if the mode update has already been sent for the current cycle
         if self.off_between_states_counter == 1:
             self.send_mode_update("between_states")
-
         # Read configuration from config.json
         with open('config.json') as config_file:
             config = json.load(config_file)
@@ -327,7 +320,6 @@ class ThermostatController:
 
         # Wait for the timer to complete before looping again
         timer.join()
-
     def stop_continuous_polling(self):
         # Set the stop_event to stop the continuous polling loop
         self.stop_event.set()
@@ -341,7 +333,6 @@ class ThermostatController:
     def fan_mode(self):
         self.current_state = 5
         self.set_relay_states(True, False, False, False)
-        self.off_between_states_counter = 0
         print("Running Fan")
 
     def update_config(self, updated_config):
@@ -390,6 +381,22 @@ def fetch_thermostat_state():
     return jsonify(state=thermostat_state)
 
 
+@app.route('/api/get_last_user_setting', methods=['GET'])
+def get_last_user_setting():
+    return jsonify({'user_set_temperature': polling_instance.user_set_temperature})
+
+
+@app.route('/api/update_user_set_temperature', methods=['POST'])
+def update_user_set_temperature():
+    try:
+        new_temperature = request.json.get('temperature')  # Updated key to 'temperature'
+        polling_instance.update_user_set_temperature(new_temperature)
+        return jsonify({'message': 'User set temperature updated successfully'})
+    except Exception as e:
+        print(f"Error updating user set temperature: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+    
+
 @app.route('/api/emergency_stop', methods=['GET', 'POST'])
 def control_emergency_stop():
     if request.method == 'GET':
@@ -400,6 +407,7 @@ def control_emergency_stop():
         else:
             thermostat_controller_instance.disable_emergency_stop()
         return jsonify({'message': 'Emergency Stop ' + ('Enabled' if thermostat_controller_instance.emergency_stop_enabled else 'Disabled')})
+
 
 @app.route('/api/get_config', methods=['GET'])
 def get_config():
@@ -426,23 +434,6 @@ def update_config():
 
     except Exception as e:
         return jsonify(success=False, message=f'Error updating configuration: {str(e)}')
-
-@app.route('/api/get_last_user_setting', methods=['GET'])
-def get_last_user_setting():
-    return jsonify({'user_set_temperature': polling_instance.user_set_temperature})
-
-
-@app.route('/api/update_user_set_temperature', methods=['POST'])
-def update_user_set_temperature():
-    try:
-        new_temperature = request.json.get('temperature')  # Updated key to 'temperature'
-        polling_instance.update_user_set_temperature(new_temperature)
-        return jsonify({'message': 'User set temperature updated successfully'})
-    except Exception as e:
-        print(f"Error updating user set temperature: {str(e)}")
-        return jsonify({'error': 'Internal Server Error'}), 500
-
-
 
 
 
