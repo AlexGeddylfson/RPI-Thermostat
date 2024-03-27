@@ -48,12 +48,41 @@ def index():
 def mode_updates():
     try:
         cursor = db.cursor(dictionary=True)
-        select_query = "SELECT * FROM mode_updates ORDER BY timestamp DESC LIMIT 10"
+        select_query = "SELECT * FROM mode_updates ORDER BY timestamp DESC LIMIT 20"
         cursor.execute(select_query)
         mode_updates = cursor.fetchall()
         return render_template('modes.html', mode_updates=mode_updates)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+
+@app.route('/api/modes')
+def mode_updates_api():
+    try:
+        cursor = db.cursor(dictionary=True)
+        select_query = "SELECT * FROM mode_updates ORDER BY timestamp DESC LIMIT 20"
+        cursor.execute(select_query)
+        mode_updates = cursor.fetchall()
+        return jsonify(mode_updates)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+    
+@app.route('/api/sensor_data')
+def sensor_data_api():
+    try:
+        cursor = db.cursor(dictionary=True)
+        select_query = "SELECT device_id, temperature, timestamp FROM sensor_data ORDER BY timestamp DESC LIMIT 200"
+        cursor.execute(select_query)
+        sensor_data = cursor.fetchall()
+
+        return jsonify(sensor_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
     finally:
         cursor.close()
 
