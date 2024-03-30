@@ -1,6 +1,8 @@
+
+
 # Thermostat Control System
 
-This project is a thermostat control system that allows you to monitor and control temperature settings through a web interface. It consists of two main components: a Flask-based web application for control and data display and a Raspberry Pi-based temperature sensor system for data collection.
+This project is a thermostat control system that allows you to monitor and control temperature settings through a web interface or native app. It consists of two main components: a Flask-based web application for control and data display and a Raspberry Pi-based temperature sensor system for data collection. You can find more information on the app [here](https://github.com/AlexGeddylfson/Thermostat-App).
 
 ## Physical Dependencies
 
@@ -96,3 +98,6 @@ WantedBy=multi-user.target
 
 6. ``` sudo systemctl daemon-reload | sudo systemctl start thermostat.service | sudo systemctl start thermostat.service```
 This should start the thermostat which will read the dht22 and report info to the webUI and the database on timers set within the python. 
+
+## Show and tell!
+Here are some of the screenshots I have from the app showing various states and settings. 
