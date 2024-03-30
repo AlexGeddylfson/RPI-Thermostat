@@ -108,7 +108,7 @@ This is one of the thermostat in the between_states mode. After having run a pre
 This is the Previous States screen. This shows the previous 20 states. 
 ![image](https://github.com/AlexGeddylfson/RPI-Thermostat/assets/8376599/b8a2972f-df75-484d-acbc-07e979a366ce)
 
-And here is the Historical Temperatures. This will show the prevoius 200 reported temperatures. 
+And here is the Historical Temperatures. This will show the previous 200 reported temperatures. 
 ![image](https://github.com/AlexGeddylfson/RPI-Thermostat/assets/8376599/06d76689-ca42-41b8-902b-775f07e7a728)
 
 
