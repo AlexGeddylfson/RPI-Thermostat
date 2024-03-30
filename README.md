@@ -101,3 +101,15 @@ This should start the thermostat which will read the dht22 and report info to th
 
 ## Show and tell!
 Here are some of the screenshots I have from the app showing various states and settings. 
+
+This is one of the thermostat in the between_states mode. After having run a previous mode. Polling to see if it needs another state change. 
+![image](https://github.com/AlexGeddylfson/RPI-Thermostat/assets/8376599/609ca249-3731-47d1-a962-5ef1438af91d)
+
+This is the Previoius States screen. This shows the previous 20 states. 
+![image](https://github.com/AlexGeddylfson/RPI-Thermostat/assets/8376599/b8a2972f-df75-484d-acbc-07e979a366ce)
+
+And here is the Historical Temperatures. This will show the prevoius 200 reported temperatures. 
+![image](https://github.com/AlexGeddylfson/RPI-Thermostat/assets/8376599/06d76689-ca42-41b8-902b-775f07e7a728)
+
+
+
