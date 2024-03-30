@@ -6,7 +6,7 @@ This project is a thermostat control system that allows you to monitor and contr
 
 ## Physical Dependencies
 
-1. A VM or physical machine running some sort of Apache/Nginx web server, and python.
+1. A VM or physical machine running some sort of SQL database, python, and optionally a web server of some sort.
 2. A Raspberry Pi with a DHT22 temperature and humidity sensor, a 30V 4 channel relay, and mine has a 7 inch touch screen. (you can do without)
 3. Basic knowledge of your specific HVAC system and the willingness to modify this code to work with anything other than a 6 wire system that has an orange wire for the energized reversal valve for COOLING. **(NOTE)** You can probably just wire up the pins that will respond as you would need them to for your specific system. 
 **EG:** With a 6 wire system, the same pin for heat may be used to energize the heat for a 4 wire furnace while ignoring the heat strips pinout.  
