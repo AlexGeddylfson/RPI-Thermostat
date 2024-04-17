@@ -49,32 +49,7 @@ class Polling:
         print("Max retries reached. Unable to read sensor data.")
         return {"temperature": None, "humidity": None}
 
-    def send_data_periodically(self):
-        # Get the latest sensor data
-        sensor_data = self.poll_sensor_data()
-
-        # If sensor data is available, send it to the server
-        if sensor_data["temperature"] is not None and sensor_data["humidity"] is not None:
-            self.send_data_to_server(sensor_data["temperature"], sensor_data["humidity"])
-
-        # Set up the timer for the next data send
-        self.data_send_timer = threading.Timer(120, self.send_data_periodically)
-        self.data_send_timer.start()
-
-    def send_data_to_server(self, temperature, humidity):
-        try:
-            data = {
-                "device_id": self.device_id,
-                "temperature": temperature,
-                "humidity": humidity
-            }
-            response = requests.post(self.config_data['vm-server'] + '/api/receive_data', json=data)
-            if response.status_code != 200:
-                print(f"Failed to send data to server. Status Code: {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print(f"Error sending data to server: {str(e)}")
-
-    def get_user_setting(self, max_retries=3, retry_delay=1, default_value=72):
+    def get_user_setting(self, max_retries=3, retry_delay=1, default_value=68):
         # If user_set_temperature is already available, return it
         if self.user_set_temperature is not None:
             return self.user_set_temperature
@@ -107,6 +82,42 @@ class Polling:
 
         print('get_user_setting: Max retries reached. Unable to fetch user setting. Returning default value:', default_value)
         return default_value
+
+    def send_data_periodically(self):
+        # Get the latest sensor data
+        sensor_data = self.poll_sensor_data()
+
+        # If sensor data is available, send it to the server
+        if sensor_data["temperature"] is not None and sensor_data["humidity"] is not None:
+            self.send_data_to_server(sensor_data["temperature"], sensor_data["humidity"])
+
+        # Set up the timer for the next data send
+        self.data_send_timer = threading.Timer(120, self.send_data_periodically)
+        self.data_send_timer.start()
+
+    def send_data_to_server(self, temperature, humidity):
+        retries = 0
+        while retries < 2:  # Maximum number of retries
+            try:
+                data = {
+                    "device_id": self.device_id,
+                    "temperature": temperature,
+                    "humidity": humidity
+                }
+                response = requests.post(self.config_data['vm-server'] + '/api/receive_data', json=data)
+                if response.status_code == 200:
+                    print("Data sent successfully to server.")
+                    return  # Exit the loop if successful
+                else:
+                    print(f"Failed to send data to server. Status Code: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error sending data to server: {str(e)}")
+
+            retries += 1
+            print(f"Retrying {retries} out of 2 times...")
+            time.sleep(10)  # Wait for 10 seconds before retrying
+
+        print("Max retries reached. Ignoring the error and continuing...")
     
     def update_user_set_temperature(self, new_temperature):
         print(f"Received new temperature from frontend: {new_temperature}")
@@ -132,6 +143,7 @@ class ThermostatController:
         self.off_mode_duration = 10  # Duration of the initial "Off" mode in seconds
         self.temperature_within_range_duration = 0
         self.time_threshold = 30  # 1 minute in seconds
+        self.fan_mode_enabled = False  # Initialize fan mode as disabled
 
         # Load configurable values from config_data
         self.cooling_set_temperature_offset = config_data.get("cooling_set_temperature_offset", 0.5)
@@ -157,7 +169,7 @@ class ThermostatController:
         try:
             data = {'device_id': 'Thermostat', 'mode': mode}
             headers = {'Content-Type': 'application/json'}
-            response = requests.post('http://robinson.home:5000/api/update_mode', json=data, headers=headers)
+            response = requests.post(self.config_data['vm-server'] + '/api/update_mode', json=data, headers=headers)
             if response.status_code == 200:
                 print(f"Mode update sent successfully. Mode: {mode}")
             else:
@@ -265,7 +277,7 @@ class ThermostatController:
                     break  # Exit the loop when off_between_states_mode is triggered
 
                 # Check if it's time to switch to emergency heat
-                if self.heat_mode_timer >= 480:  # 8 minutes * 60 seconds
+                if self.heat_mode_timer >= 600:  # 8 minutes * 60 seconds
                     self.send_mode_update("emergency_heat")
                     self.current_state = 4
                     heating_set_temperature = user_set_temperature + self.heating_set_temperature_offset
@@ -291,7 +303,13 @@ class ThermostatController:
 
     def off_between_states_mode(self):
         self.current_state = 6
-        self.set_relay_states(False, False, False, False)
+        # Check if fan mode is enabled
+        if not self.fan_mode_enabled:
+            # Set relay states for off mode if fan mode is off
+            self.set_relay_states(False, False, False, False)
+        else:
+            # Set relay states for fan mode
+            self.set_relay_states(True, False, False, False)
         print("Between States")
         self.heat_mode_timer = 0
 
@@ -330,11 +348,6 @@ class ThermostatController:
 
         print("Switched back to loop after the timer completed")
 
-    def fan_mode(self):
-        self.current_state = 5
-        self.set_relay_states(True, False, False, False)
-        print("Running Fan")
-
     def update_config(self, updated_config):
         # Validate and update the config_data based on the incoming data
         for key, value in updated_config.items():
@@ -363,6 +376,26 @@ thermostat_thread.start()
 
 
 # Define Flask routes
+
+@app.route('/fan_mode', methods=['POST'])
+def control_fan_mode():
+    data = request.get_json()
+    if 'enable' in data:
+        # Only allow relay state changes if the system is in the 'Between States' mode
+        if thermostat_controller_instance.current_state == 'Between States':
+            thermostat_controller_instance.fan_mode_enabled = data['enable']
+            if data['enable']:
+                thermostat_controller_instance.set_relay_states(True, False, False, False)
+                return jsonify({'message': 'Fan mode enabled and relays adjusted'}), 200
+            else:
+                # Optionally reset relays when disabling fan mode if in between states
+                thermostat_controller_instance.set_relay_states(False, False, False, False)
+                return jsonify({'message': 'Fan mode disabled and relays reset'}), 200
+        else:
+            return jsonify({'message': 'Relay control not allowed in the current state'}), 403
+    else:
+        return jsonify({'error': 'Please provide "enable" parameter in JSON request'}), 400
+
 
 @app.route('/api/get_current_temperature', methods=['GET'])
 def get_current_temperature():
@@ -435,8 +468,45 @@ def update_config():
     except Exception as e:
         return jsonify(success=False, message=f'Error updating configuration: {str(e)}')
 
+@app.route('/api/deviceid', methods=['POST'])
+def update_device_id():
+    try:
+        data = request.json
+        new_device_id = data.get('device_id')
+        if new_device_id:
+            config['device_id'] = new_device_id
+            # Update device ID in memory
+            global device_id
+            device_id = new_device_id
+            with open('config.json', 'w') as config_file:
+                json.dump(config, config_file, indent=4)
+            return jsonify({'message': 'Device ID updated successfully', 'new_device_id': new_device_id})
+        else:
+            return jsonify({'error': 'No device_id provided in request'})
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
+@app.route('/api/isthermostatcontroller', methods=['GET'])
+def get_thermostat_controller_flag():
+    return jsonify({'isthermostatcontroller': config.get('isthermostatcontroller', False)})
 
+@app.route('/api/isthermostatcontroller', methods=['POST'])
+def set_thermostat_controller_flag():
+    data = request.json
+    new_flag = data.get('isthermostatcontroller')
 
+    # Check if the provided data is valid
+    if new_flag is None or type(new_flag) is not bool:
+        return jsonify({'error': 'Invalid value provided for isthermostatcontroller. Use true or false.'}), 400
+
+    # Update the config file
+    config['isthermostatcontroller'] = new_flag
+    with open('config.json', 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+
+    return jsonify({'message': 'isthermostatcontroller flag updated successfully'}), 200
+@app.route('/api/deviceid', methods=['GET'])
+def get_device_id():
+    return jsonify({'device_id': config['device_id']})
 # Run the Flask app
 app.run(host='0.0.0.0', port=5001)

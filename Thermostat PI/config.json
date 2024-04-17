@@ -11,5 +11,6 @@
         "first_counter": 480,
         "second_counter": 240,
         "third_counter": 20
-    }
+    },
+    "isthermostatcontroller": true
 }

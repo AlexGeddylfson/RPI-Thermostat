@@ -1,0 +1,7 @@
+{
+    "DHT_SENSOR": "DHT22",
+    "DHT_PIN": 14,
+    "api_url": "http://serverurlhere:5000/api/receive_data",
+    "device_id": "nameyourdevicehere",
+    "isthermostatcontroller": false
+}
